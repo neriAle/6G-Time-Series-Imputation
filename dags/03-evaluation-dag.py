@@ -27,18 +27,36 @@ def model_evaluation():
 
     @task
     def evaluate_timesnet():
-        # Placeholder
-        return ""
+        pred_path = os.path.join(IMPUTED_DIR, "timesnet_output.parquet")
+        if not os.path.exists(pred_path):
+            # raise FileNotFoundError(
+            #     f"Missing predictions at {pred_path}. Run imputation DAG first!"
+            # )
+            return "placeholder"
+
+        return evaluate_model(pred_path, GT_PATH, "TimesNet", RESULTS_DIR)
 
     @task
     def evaluate_brits():
-        # Placeholder
-        return ""
+        pred_path = os.path.join(IMPUTED_DIR, "brits_output.parquet")
+        if not os.path.exists(pred_path):
+            # raise FileNotFoundError(
+            #     f"Missing predictions at {pred_path}. Run imputation DAG first!"
+            # )
+            return "placeholder"
+
+        return evaluate_model(pred_path, GT_PATH, "BRITS", RESULTS_DIR)
 
     @task
     def evaluate_csdi():
-        # Placeholder
-        return ""
+        pred_path = os.path.join(IMPUTED_DIR, "csdi_output.parquet")
+        if not os.path.exists(pred_path):
+            # raise FileNotFoundError(
+            #     f"Missing predictions at {pred_path}. Run imputation DAG first!"
+            # )
+            return "placeholder"
+
+        return evaluate_model(pred_path, GT_PATH, "CSDI", RESULTS_DIR)
 
     # Execution
     evaluate_kalman()
