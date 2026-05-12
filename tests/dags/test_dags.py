@@ -19,7 +19,7 @@ def suppress_logging(namespace):
 def get_import_errors():
     """Generate a tuple for import errors in the dag bag"""
     with suppress_logging("airflow"):
-        dag_bag = DagBag(include_examples=False)
+        dag_bag = DagBag(dag_folder="dags/", include_examples=False)
 
         def strip_path_prefix(path):
             return os.path.relpath(path, os.environ.get("AIRFLOW_HOME", "."))
@@ -42,6 +42,6 @@ def test_file_imports(rel_path, rv):
 def test_expected_dags_are_loaded():
     """Ensure our specific pipeline DAGs are actually being found by Airflow."""
     with suppress_logging("airflow"):
-        dag_bag = DagBag(include_examples=False)
+        dag_bag = DagBag(dag_folder="dags/", include_examples=False)
 
     assert "data_preparation" in dag_bag.dags, "Data Prep DAG is missing!"
