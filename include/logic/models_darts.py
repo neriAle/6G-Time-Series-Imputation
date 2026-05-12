@@ -1,0 +1,70 @@
+import os
+import pandas as pd
+from darts import TimeSeries
+from darts.models import KalmanFilter
+
+# Columns that have to be imputed
+TARGET_COLUMNS = [
+    "cpu_limit",
+    "cpu_usage",
+    "n",
+    "c",
+    "ram_limit_mb",
+    "ram_usage_mb",
+    "lat50_ms",
+    "lat66_ms",
+    "lat75_ms",
+    "lat80_ms",
+    "lat90_ms",
+    "lat95_ms",
+    "lat98_ms",
+    "lat99_ms",
+    "lat100_ms",
+]
+
+
+def impute_kalman_filter(
+    discrete_train_path: str, discrete_test_path: str, output_dir: str
+) -> str:
+    """
+    Fits a Kalman Filter on the training set, then imputes missing values on the test set.
+    """
+    print(f"Loading train data: {discrete_train_path}")
+    df_train = pd.read_parquet(discrete_train_path)
+
+    print(f"Loading test data: {discrete_test_path}")
+    df_test = pd.read_parquet(discrete_test_path)
+
+    # Create a copy to store the predictions without altering the intact columns
+    df_imputed = df_test.copy()
+
+    # Temporarily interpolate training data, to remove NaNs so the Darts N4SID algorithm doesn't crash.
+    df_train_clean = df_train.interpolate(method="linear").ffill().bfill()
+
+    # Initialize the Kalman Filter tracking 1 variable at a time (univariate)
+    kf = KalmanFilter(dim_x=1)
+
+    for col in TARGET_COLUMNS:
+        print(f"Imputing column: {col}")
+
+        # Convert into Darts TimeSeries objects
+        train_ts = TimeSeries.from_dataframe(df_train_clean, value_cols=[col])
+        test_ts = TimeSeries.from_dataframe(df_test, value_cols=[col])
+
+        # Fit (Train) the model to learn the properties of the column
+        kf = KalmanFilter(dim_x=1)
+        kf.fit(train_ts[-1000:])
+
+        # Run the filter on the test set
+        filtered_ts = kf.filter(test_ts)
+
+        # Extract the imputed values back into the dataframe
+        df_imputed[col] = filtered_ts.values().flatten()
+
+    # Save the fully imputed dataset
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, "kalman_output.parquet")
+    df_imputed.to_parquet(output_path)
+
+    print(f"Kalman imputation complete. Saved to: {output_path}")
+    return output_path
