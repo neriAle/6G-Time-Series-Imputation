@@ -46,3 +46,4 @@ def test_expected_dags_are_loaded():
 
     assert "data_preparation" in dag_bag.dags, "Data Prep DAG is missing!"
     assert "data_imputation" in dag_bag.dags, "Imputation DAG is missing!"
+    assert "model_evaluation" in dag_bag.dags, "Evaluation DAG is missing!"

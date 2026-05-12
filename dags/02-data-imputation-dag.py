@@ -5,6 +5,7 @@ from include.logic.models_darts import impute_kalman_filter
 
 prepared_data_asset = Asset("file://include/intermediate/prepared_data")
 INTERMEDIATE_DIR = "include/data/intermediate"
+IMPUTED_DIR = "include/data/intermediate/imputed"
 
 
 @dag(
@@ -18,7 +19,7 @@ def data_imputation():
     @task
     def run_kalman_filter(discrete_train_path, discrete_test_path):
         return impute_kalman_filter(
-            discrete_train_path, discrete_test_path, INTERMEDIATE_DIR
+            discrete_train_path, discrete_test_path, IMPUTED_DIR
         )
 
     @task

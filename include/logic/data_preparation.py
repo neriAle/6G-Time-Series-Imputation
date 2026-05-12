@@ -1,6 +1,24 @@
 import pandas as pd
 import os
 
+TARGET_COLUMNS = [
+    "cpu_limit",
+    "cpu_usage",
+    "n",
+    "c",
+    "ram_limit_mb",
+    "ram_usage_mb",
+    "lat50_ms",
+    "lat66_ms",
+    "lat75_ms",
+    "lat80_ms",
+    "lat90_ms",
+    "lat95_ms",
+    "lat98_ms",
+    "lat99_ms",
+    "lat100_ms",
+]
+
 
 def ingest_raw_csvs(csv_paths_dict, intermediate_dir):
     """
@@ -12,6 +30,8 @@ def ingest_raw_csvs(csv_paths_dict, intermediate_dir):
 
     for name, path in csv_paths_dict.items():
         df = pd.read_csv(path)
+        if name == "test_input":
+            df["is_gap"] = df[TARGET_COLUMNS].isna().any(axis=1).astype(int)
         out_path = os.path.join(intermediate_dir, f"{name}.parquet")
         df.to_parquet(out_path)
         parquet_paths[name] = out_path
