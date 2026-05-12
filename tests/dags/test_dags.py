@@ -45,3 +45,4 @@ def test_expected_dags_are_loaded():
         dag_bag = DagBag(dag_folder="dags/", include_examples=False)
 
     assert "data_preparation" in dag_bag.dags, "Data Prep DAG is missing!"
+    assert "data_imputation" in dag_bag.dags, "Imputation DAG is missing!"
