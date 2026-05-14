@@ -1,4 +1,6 @@
 import os
+import json
+import time
 import pandas as pd
 from darts import TimeSeries
 from darts.models import KalmanFilter
@@ -41,8 +43,8 @@ def impute_kalman_filter(
     # Temporarily interpolate training data, to remove NaNs so the Darts N4SID algorithm doesn't crash.
     df_train_clean = df_train.interpolate(method="linear").ffill().bfill()
 
-    # Initialize the Kalman Filter tracking 1 variable at a time (univariate)
-    kf = KalmanFilter(dim_x=1)
+    total_fit_time = 0.0
+    total_predict_time = 0.0
 
     for col in TARGET_COLUMNS:
         print(f"Imputing column: {col}")
@@ -52,11 +54,15 @@ def impute_kalman_filter(
         test_ts = TimeSeries.from_dataframe(df_test, value_cols=[col])
 
         # Fit (Train) the model to learn the properties of the column
+        start_fit = time.perf_counter()
         kf = KalmanFilter(dim_x=1)
         kf.fit(train_ts[-1000:])
+        total_fit_time += time.perf_counter() - start_fit
 
         # Run the filter on the test set
+        start_predict = time.perf_counter()
         filtered_ts = kf.filter(test_ts)
+        total_predict_time += time.perf_counter() - start_predict
 
         # Extract the imputed values back into the dataframe
         df_imputed[col] = filtered_ts.values().flatten()
@@ -65,6 +71,16 @@ def impute_kalman_filter(
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, "kalman_output.parquet")
     df_imputed.to_parquet(output_path)
+
+    timing_data = {
+        "fit_time_seconds": total_fit_time,
+        "predict_time_seconds": total_predict_time,
+        "total_algorithmic_time": total_fit_time + total_predict_time,
+    }
+
+    timing_path = os.path.join(output_dir, "kalman_timing.json")
+    with open(timing_path, "w") as f:
+        json.dump(timing_data, f, indent=4)
 
     print(f"Kalman imputation complete. Saved to: {output_path}")
     return output_path

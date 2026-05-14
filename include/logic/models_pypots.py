@@ -1,4 +1,6 @@
 import os
+import json
+import time
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
@@ -94,11 +96,15 @@ def impute_pypots_model(
 
     # 3. Train
     print(f"Training {model_type}...")
+    start_train = time.perf_counter()
     model.fit({"X": X_train})
+    train_time = time.perf_counter() - start_train
 
     # 4. Predict
     print(f"Predicting with {model_type}...")
+    start_predict = time.perf_counter()
     imputed_output = model.predict({"X": X_test})
+    predict_time = time.perf_counter() - start_predict
 
     # Extract the numpy array
     if isinstance(imputed_output, dict):
@@ -120,6 +126,15 @@ def impute_pypots_model(
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, f"{model_type.lower()}_output.parquet")
     df_imputed.to_parquet(output_path)
+
+    timing_data = {
+        "train_time_seconds": train_time,
+        "predict_time_seconds": predict_time,
+        "total_algorithmic_time": train_time + predict_time,
+    }
+    timing_path = os.path.join(output_dir, f"{model_type.lower()}_timing.json")
+    with open(timing_path, "w") as f:
+        json.dump(timing_data, f, indent=4)
 
     print(f"{model_type} imputation complete. Saved to: {output_path}")
     return output_path
