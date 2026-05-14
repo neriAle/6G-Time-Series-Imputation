@@ -1,4 +1,5 @@
 from airflow.sdk import Asset, dag, task
+from airflow.sdk import Param
 from pendulum import datetime
 from include.logic.data_preparation import ingest_raw_csvs, apply_discrete_adapter
 
@@ -13,12 +14,43 @@ INTERMEDIATE_DIR = "include/data/intermediate"
 prepared_data_asset = Asset("file://include/intermediate/prepared_data")
 
 
-@dag(start_date=datetime(2024, 4, 20), schedule=None, catchup=False)
+@dag(
+    start_date=datetime(2024, 4, 20),
+    schedule=None,
+    catchup=False,
+    params={
+        "mode": Param(
+            default="static",
+            type="string",
+            enum=["static", "dynamic"],
+            description="Use static test_input.csv or dynamically generate gaps?",
+        ),
+        "missing_ratio": Param(
+            default=0.20,
+            type="number",
+            minimum=0.01,
+            maximum=0.99,
+            description="Fraction of data to mask (if mode=dynamic).",
+        ),
+        "block_size": Param(
+            default=5,
+            type="integer",
+            minimum=1,
+            maximum=100,
+            description="Number of consecutive rows per gap (if mode=dynamic).",
+        ),
+    },
+)
 def data_preparation():
 
     @task(multiple_outputs=True)
-    def ingest_datasets(csv_dict, out_dir):
-        return ingest_raw_csvs(csv_dict, out_dir)
+    def ingest_datasets(csv_dict, out_dir, **kwargs):
+        ui_params = kwargs["params"]
+
+        mode = ui_params["mode"]
+        missing_ratio = ui_params["missing_ratio"]
+        block_size = ui_params["block_size"]
+        return ingest_raw_csvs(csv_dict, out_dir, mode, missing_ratio, block_size)
 
     @task(outlets=[prepared_data_asset])
     def prepare_discrete_versions(continuous_paths, out_dir):
