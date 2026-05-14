@@ -83,6 +83,9 @@ def impute_pypots_model(
             n_layers=2,
             n_heads=2,
             n_channels=16,
+            d_time_embedding=32,
+            d_feature_embedding=16,
+            d_diffusion_embedding=32,
             epochs=10,
         )
     else:
