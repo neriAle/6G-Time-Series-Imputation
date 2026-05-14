@@ -61,7 +61,7 @@ def impute_pypots_model(
     df_test = pd.read_parquet(continuous_test_path)
 
     scaler = StandardScaler()
-    n_steps = 100
+    n_steps = 300
     n_features = len(TARGET_COLUMNS)
 
     # 1. Prepare Tensors
@@ -74,19 +74,20 @@ def impute_pypots_model(
     # Note: epochs=10 is set for pipeline testing. Increase to 50-100 for better accuracy.
     if model_type == "BRITS":
         model = BRITS(
-            n_steps=n_steps, n_features=n_features, rnn_hidden_size=64, epochs=10
+            n_steps=n_steps, n_features=n_features, rnn_hidden_size=256, epochs=100
         )
     elif model_type == "CSDI":
         model = CSDI(
             n_steps=n_steps,
             n_features=n_features,
-            n_layers=2,
-            n_heads=2,
+            n_layers=4,
+            n_heads=4,
             n_channels=16,
-            d_time_embedding=32,
-            d_feature_embedding=16,
-            d_diffusion_embedding=32,
-            epochs=10,
+            d_time_embedding=64,
+            d_feature_embedding=64,
+            d_diffusion_embedding=64,
+            batch_size=8,
+            epochs=100,
         )
     else:
         raise ValueError(f"Unknown model type: {model_type}")
