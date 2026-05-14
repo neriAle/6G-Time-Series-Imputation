@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+import numpy as np
 
 TARGET_COLUMNS = [
     "cpu_limit",
@@ -20,21 +21,42 @@ TARGET_COLUMNS = [
 ]
 
 
-def ingest_raw_csvs(csv_paths_dict, intermediate_dir):
+def ingest_raw_csvs(
+    csv_paths_dict, intermediate_dir, mode="static", missing_ratio=0.2, block_size=5
+):
     """
     Reads the raw CSV files, converts them to Parquet for faster I/O,
     saves them in the intermediate directory, and returns their path.
+    If mode="dynamic" is passed, instead of reading test_input, create it
+    by masking the ground truth, using the `missing_ratio`, and `block_size` parameters
     """
     os.makedirs(intermediate_dir, exist_ok=True)
     parquet_paths = {}
 
-    for name, path in csv_paths_dict.items():
-        df = pd.read_csv(path)
-        if name == "test_input":
-            df["is_gap"] = df[TARGET_COLUMNS].isna().any(axis=1).astype(int)
-        out_path = os.path.join(intermediate_dir, f"{name}.parquet")
-        df.to_parquet(out_path)
-        parquet_paths[name] = out_path
+    if mode == "static":
+        for name, path in csv_paths_dict.items():
+            df = pd.read_csv(path)
+            if name == "test_input":
+                df["is_gap"] = df[TARGET_COLUMNS].isna().any(axis=1).astype(int)
+            out_path = os.path.join(intermediate_dir, f"{name}.parquet")
+            df.to_parquet(out_path)
+            parquet_paths[name] = out_path
+    else:
+        for name, path in csv_paths_dict.items():
+            if name == "test_input":
+                continue
+            df = pd.read_csv(path)
+
+            if name == "test_gt":
+                test_df = inject_gaps_dynamically(
+                    df, TARGET_COLUMNS, missing_ratio, block_size
+                )
+                out_path = os.path.join(intermediate_dir, "test_input.parquet")
+                test_df.to_parquet(out_path)
+                parquet_paths["test_input"] = out_path
+            out_path = os.path.join(intermediate_dir, f"{name}.parquet")
+            df.to_parquet(out_path)
+            parquet_paths[name] = out_path
 
     return parquet_paths
 
@@ -48,6 +70,7 @@ def apply_discrete_adapter(parquet_path, intermediate_dir):
 
     # Index the Dataframe on the timestamp column
     df = df.sort_values("time")
+    df = df.drop_duplicates(subset=["time"], keep="last")
     df = df.set_index("time")
 
     # Create a mathematically perfect grid from min time to max time (step=1 second)
@@ -66,3 +89,65 @@ def apply_discrete_adapter(parquet_path, intermediate_dir):
         f"Discrete Adapter applied: Expanded from {len(df)} to {len(df_discrete)} rows."
     )
     return out_path
+
+
+def inject_gaps_dynamically(df_gt, target_columns, missing_ratio=0.2, block_size=5):
+    """
+    Injects non-overlapping NaN gaps in a dataframe for all `target_columns`.
+    """
+    print(
+        f"Injecting non-overlapping gaps: {missing_ratio * 100}% missingness, block size {block_size}"
+    )
+
+    # Reset index
+    df_injected = df_gt.copy().reset_index(drop=True)
+    df_injected["is_gap"] = 0
+
+    total_rows = len(df_injected)
+    n_missing_target = int(total_rows * missing_ratio)
+    n_blocks = n_missing_target // block_size
+
+    # Initialize valid starting positions
+    valid_indices = list(range(0, total_rows - block_size + 1))
+    start_indices = []
+
+    np.random.seed(42)
+
+    # Non-Overlapping Selection of blocks to mask
+    for _ in range(n_blocks):
+        if not valid_indices:
+            print(
+                "Warning: Ran out of valid space for non-overlapping blocks before reaching target ratio."
+            )
+            break
+
+        start = np.random.choice(valid_indices)
+        start_indices.append(start)
+
+        # Remove this chunk and its surroundings to prevent overlapping.
+        valid_indices = [
+            idx
+            for idx in valid_indices
+            if idx <= start - block_size or idx >= start + block_size
+        ]
+
+    # Get the integer positions of the columns for .iloc
+    target_col_indices = df_injected.columns.get_indexer(target_columns)
+    is_gap_index = df_injected.columns.get_loc("is_gap")
+
+    # Apply the masks
+    for start_idx in start_indices:
+        end_idx = start_idx + block_size
+
+        # Inject NaNs into the target metrics
+        df_injected.iloc[start_idx:end_idx, target_col_indices] = np.nan
+
+        # Flag the rows as missing
+        df_injected.iloc[start_idx:end_idx, is_gap_index] = 1
+
+    actual_missing = df_injected["is_gap"].sum()
+    print(
+        f"Successfully injected {actual_missing} masked rows (Target was {n_missing_target})."
+    )
+
+    return df_injected
