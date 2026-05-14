@@ -3,3 +3,6 @@ pandas
 pyarrow>=10.0.0
 darts
 numpy
+scikit-learn
+torch
+pypots
