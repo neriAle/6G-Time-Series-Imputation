@@ -21,21 +21,42 @@ TARGET_COLUMNS = [
 ]
 
 
-def ingest_raw_csvs(csv_paths_dict, intermediate_dir):
+def ingest_raw_csvs(
+    csv_paths_dict, intermediate_dir, mode="static", missing_ratio=0.2, block_size=5
+):
     """
     Reads the raw CSV files, converts them to Parquet for faster I/O,
     saves them in the intermediate directory, and returns their path.
+    If mode="dynamic" is passed, instead of reading test_input, create it
+    by masking the ground truth, using the `missing_ratio`, and `block_size` parameters
     """
     os.makedirs(intermediate_dir, exist_ok=True)
     parquet_paths = {}
 
-    for name, path in csv_paths_dict.items():
-        df = pd.read_csv(path)
-        if name == "test_input":
-            df["is_gap"] = df[TARGET_COLUMNS].isna().any(axis=1).astype(int)
-        out_path = os.path.join(intermediate_dir, f"{name}.parquet")
-        df.to_parquet(out_path)
-        parquet_paths[name] = out_path
+    if mode == "static":
+        for name, path in csv_paths_dict.items():
+            df = pd.read_csv(path)
+            if name == "test_input":
+                df["is_gap"] = df[TARGET_COLUMNS].isna().any(axis=1).astype(int)
+            out_path = os.path.join(intermediate_dir, f"{name}.parquet")
+            df.to_parquet(out_path)
+            parquet_paths[name] = out_path
+    else:
+        for name, path in csv_paths_dict.items():
+            if name == "test_input":
+                continue
+            df = pd.read_csv(path)
+
+            if name == "test_gt":
+                test_df = inject_gaps_dynamically(
+                    df, TARGET_COLUMNS, missing_ratio, block_size
+                )
+                out_path = os.path.join(intermediate_dir, "test_input.parquet")
+                test_df.to_parquet(out_path)
+                parquet_paths["test_input"] = out_path
+            out_path = os.path.join(intermediate_dir, f"{name}.parquet")
+            df.to_parquet(out_path)
+            parquet_paths[name] = out_path
 
     return parquet_paths
 
