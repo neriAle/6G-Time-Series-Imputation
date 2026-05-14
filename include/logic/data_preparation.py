@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+import numpy as np
 
 TARGET_COLUMNS = [
     "cpu_limit",
@@ -48,6 +49,7 @@ def apply_discrete_adapter(parquet_path, intermediate_dir):
 
     # Index the Dataframe on the timestamp column
     df = df.sort_values("time")
+    df = df.drop_duplicates(subset=["time"], keep="last")
     df = df.set_index("time")
 
     # Create a mathematically perfect grid from min time to max time (step=1 second)
@@ -66,3 +68,65 @@ def apply_discrete_adapter(parquet_path, intermediate_dir):
         f"Discrete Adapter applied: Expanded from {len(df)} to {len(df_discrete)} rows."
     )
     return out_path
+
+
+def inject_gaps_dynamically(df_gt, target_columns, missing_ratio=0.2, block_size=5):
+    """
+    Injects non-overlapping NaN gaps in a dataframe for all `target_columns`.
+    """
+    print(
+        f"Injecting non-overlapping gaps: {missing_ratio * 100}% missingness, block size {block_size}"
+    )
+
+    # Reset index
+    df_injected = df_gt.copy().reset_index(drop=True)
+    df_injected["is_gap"] = 0
+
+    total_rows = len(df_injected)
+    n_missing_target = int(total_rows * missing_ratio)
+    n_blocks = n_missing_target // block_size
+
+    # Initialize valid starting positions
+    valid_indices = list(range(0, total_rows - block_size + 1))
+    start_indices = []
+
+    np.random.seed(42)
+
+    # Non-Overlapping Selection of blocks to mask
+    for _ in range(n_blocks):
+        if not valid_indices:
+            print(
+                "Warning: Ran out of valid space for non-overlapping blocks before reaching target ratio."
+            )
+            break
+
+        start = np.random.choice(valid_indices)
+        start_indices.append(start)
+
+        # Remove this chunk and its surroundings to prevent overlapping.
+        valid_indices = [
+            idx
+            for idx in valid_indices
+            if idx <= start - block_size or idx >= start + block_size
+        ]
+
+    # Get the integer positions of the columns for .iloc
+    target_col_indices = df_injected.columns.get_indexer(target_columns)
+    is_gap_index = df_injected.columns.get_loc("is_gap")
+
+    # Apply the masks
+    for start_idx in start_indices:
+        end_idx = start_idx + block_size
+
+        # Inject NaNs into the target metrics
+        df_injected.iloc[start_idx:end_idx, target_col_indices] = np.nan
+
+        # Flag the rows as missing
+        df_injected.iloc[start_idx:end_idx, is_gap_index] = 1
+
+    actual_missing = df_injected["is_gap"].sum()
+    print(
+        f"Successfully injected {actual_missing} masked rows (Target was {n_missing_target})."
+    )
+
+    return df_injected
