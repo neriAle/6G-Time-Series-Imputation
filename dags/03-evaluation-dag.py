@@ -26,6 +26,16 @@ def model_evaluation():
         return evaluate_model(pred_path, GT_PATH, "Kalman", RESULTS_DIR)
 
     @task
+    def evaluate_nearest():
+        pred_path = os.path.join(IMPUTED_DIR, "nearest_output.parquet")
+        if not os.path.exists(pred_path):
+            raise FileNotFoundError(
+                f"Missing predictions at {pred_path}. Run imputation DAG first!"
+            )
+
+        return evaluate_model(pred_path, GT_PATH, "Nearest", RESULTS_DIR)
+
+    @task
     def evaluate_timesnet():
         pred_path = os.path.join(IMPUTED_DIR, "timesnet_output.parquet")
         if not os.path.exists(pred_path):
@@ -58,6 +68,7 @@ def model_evaluation():
 
     # Execution
     evaluate_kalman()
+    evaluate_nearest()
     evaluate_timesnet()
     evaluate_brits()
     evaluate_csdi()
