@@ -84,3 +84,50 @@ def impute_kalman_filter(
 
     print(f"Kalman imputation complete. Saved to: {output_path}")
     return output_path
+
+
+def impute_nearest(discrete_test_path: str, output_dir: str) -> str:
+    """
+    Imputes missing values using Nearest-Neighbor interpolation (0-order hold).
+    Requires the train_path in the signature to match Airflow DAG templates, but does not use it.
+    """
+    print(f"Loading test data: {discrete_test_path}")
+    df_test = pd.read_parquet(discrete_test_path)
+
+    df_imputed = df_test.copy()
+
+    # Initialize Cumulative Timers
+    total_fit_time = 0.0
+    total_predict_time = 0.0
+
+    for col in TARGET_COLUMNS:
+        print(f"Imputing column: {col}")
+
+        start_predict = time.perf_counter()
+
+        # 1. Apply nearest neighbor interpolation
+        # 2. Chain ffill() and bfill() to catch any NaNs that exist at the absolute first or last row
+        df_imputed[col] = df_imputed[col].interpolate(method="nearest").ffill().bfill()
+
+        total_predict_time += time.perf_counter() - start_predict
+
+    # Save the fully imputed dataset
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, "nearest_output.parquet")
+    df_imputed.to_parquet(output_path)
+
+    # Save the timing data
+    timing_data = {
+        "fit_time_seconds": total_fit_time,
+        "predict_time_seconds": total_predict_time,
+        "total_algorithmic_time": total_fit_time + total_predict_time,
+    }
+
+    timing_path = os.path.join(output_dir, "nearest_timing.json")
+    with open(timing_path, "w") as f:
+        json.dump(timing_data, f, indent=4)
+
+    print(f"Nearest imputation complete. Saved to: {output_path}")
+    print(f"Total Algorithmic Time: {total_predict_time:.6f}s")
+
+    return output_path
