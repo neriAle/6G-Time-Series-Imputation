@@ -1,7 +1,7 @@
 from airflow.sdk import dag, task, Asset
 from pendulum import datetime
 import os
-from include.logic.models_darts import impute_kalman_filter
+from include.logic.models_darts import impute_kalman_filter, impute_nearest
 from include.logic.models_pypots import impute_pypots_model
 
 prepared_data_asset = Asset("file://include/intermediate/prepared_data")
@@ -22,6 +22,10 @@ def data_imputation():
         return impute_kalman_filter(
             discrete_train_path, discrete_test_path, IMPUTED_DIR
         )
+
+    @task
+    def run_nearest(discrete_test_path):
+        return impute_nearest(discrete_test_path, IMPUTED_DIR)
 
     @task
     def run_timesnet(discrete_train_path, discrete_test_path):
@@ -47,6 +51,7 @@ def data_imputation():
     discrete_test = os.path.join(INTERMEDIATE_DIR, "test_input_discrete.parquet")
 
     run_kalman_filter(discrete_train, discrete_test)
+    run_nearest(discrete_test)
     run_timesnet(discrete_train, discrete_test)
     run_brits(continuous_train, continuous_test)
     run_csdi(continuous_train, continuous_test)
