@@ -22,14 +22,19 @@ TARGET_COLUMNS = [
 
 
 def ingest_raw_csvs(
-    csv_paths_dict, intermediate_dir, mode="static", missing_ratio=0.2, block_size=5
+    csv_paths_dict, intermediate_dir, mode="static", gap_parameters=None
 ):
     """
     Reads the raw CSV files, converts them to Parquet for faster I/O,
-    saves them in the intermediate directory, and returns their path.
-    If mode="dynamic" is passed, instead of reading test_input, create it
-    by masking the ground truth, using the `missing_ratio`, and `block_size` parameters
+    saves them in the intermediate directory, and returns their paths.
+
+    If mode="dynamic", skips the original test_input and creates multiple
+    test_inputs by masking the ground truth using a list of `gap_parameters`.
+    Example of gap_parameters: [(missing_ratio=0.2, block_size=5), (0.4, 10)]
     """
+    if gap_parameters is None:
+        gap_parameters = [(0.2, 5)]
+
     os.makedirs(intermediate_dir, exist_ok=True)
     parquet_paths = {}
 
@@ -38,22 +43,37 @@ def ingest_raw_csvs(
             df = pd.read_csv(path)
             if name == "test_input":
                 df["is_gap"] = df[TARGET_COLUMNS].isna().any(axis=1).astype(int)
-            out_path = os.path.join(intermediate_dir, f"{name}.parquet")
+                out_path = os.path.join(intermediate_dir, f"{name}.parquet")
+                # Store as a list so downstream tasks handle static/dynamic uniformly
+                parquet_paths["test_inputs"] = [out_path]
+            else:
+                out_path = os.path.join(intermediate_dir, f"{name}.parquet")
+                parquet_paths[name] = out_path
             df.to_parquet(out_path)
-            parquet_paths[name] = out_path
     else:
+        parquet_paths["test_inputs"] = []
+
         for name, path in csv_paths_dict.items():
             if name == "test_input":
                 continue
             df = pd.read_csv(path)
 
             if name == "test_gt":
-                test_df = inject_gaps_dynamically(
-                    df, TARGET_COLUMNS, missing_ratio, block_size
-                )
-                out_path = os.path.join(intermediate_dir, "test_input.parquet")
-                test_df.to_parquet(out_path)
-                parquet_paths["test_input"] = out_path
+                # Loop through every parameter combination
+                for scenario in gap_parameters:
+                    ratio = float(scenario[0])
+                    size = int(scenario[1])
+
+                    test_df = inject_gaps_dynamically(df, TARGET_COLUMNS, ratio, size)
+
+                    # Create a unique filename based on the parameters
+                    file_name = f"test_input_r{ratio}_s{size}.parquet"
+                    out_path = os.path.join(intermediate_dir, file_name)
+
+                    test_df.to_parquet(out_path)
+                    parquet_paths["test_inputs"].append(out_path)
+
+            # Save the original files (train_data and test_gt) normally
             out_path = os.path.join(intermediate_dir, f"{name}.parquet")
             df.to_parquet(out_path)
             parquet_paths[name] = out_path
