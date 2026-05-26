@@ -39,10 +39,9 @@ def model_evaluation():
     def evaluate_timesnet():
         pred_path = os.path.join(IMPUTED_DIR, "timesnet_output.parquet")
         if not os.path.exists(pred_path):
-            # raise FileNotFoundError(
-            #     f"Missing predictions at {pred_path}. Run imputation DAG first!"
-            # )
-            return "placeholder"
+            raise FileNotFoundError(
+                f"Missing predictions at {pred_path}. Run imputation DAG first!"
+            )
 
         return evaluate_model(pred_path, GT_PATH, "TimesNet", RESULTS_DIR)
 
