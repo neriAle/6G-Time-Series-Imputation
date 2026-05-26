@@ -3,6 +3,7 @@ from pendulum import datetime
 import os
 from include.logic.models_darts import impute_kalman_filter, impute_nearest
 from include.logic.models_pypots import impute_pypots_model
+from include.logic.models_timesnet import impute_timesnet
 
 prepared_data_asset = Asset("file://include/intermediate/prepared_data")
 INTERMEDIATE_DIR = "include/data/intermediate"
@@ -29,8 +30,7 @@ def data_imputation():
 
     @task
     def run_timesnet(discrete_train_path, discrete_test_path):
-        # Placeholder
-        return ""
+        return impute_timesnet(discrete_train_path, discrete_test_path, IMPUTED_DIR)
 
     # 2. Continuous Models (Using the raw Partially Observed Time Series (POTS) .parquet)
     @task
