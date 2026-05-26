@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import re
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
@@ -52,15 +53,12 @@ def preprocess_and_reshape(
 
 def impute_pypots_model(
     continuous_train_path: str,
-    continuous_test_path: str,
+    continuous_test_paths: list,
     model_type: str,
     output_dir: str,
 ) -> str:
     print(f"Loading continuous train: {continuous_train_path}")
     df_train = pd.read_parquet(continuous_train_path)
-
-    print(f"Loading continuous test: {continuous_test_path}")
-    df_test = pd.read_parquet(continuous_test_path)
 
     scaler = StandardScaler()
     n_steps = 300
@@ -68,9 +66,6 @@ def impute_pypots_model(
 
     # 1. Prepare Tensors
     X_train, _ = preprocess_and_reshape(df_train, scaler, n_steps, is_train=True)
-    X_test, test_pad_len = preprocess_and_reshape(
-        df_test, scaler, n_steps, is_train=False
-    )
 
     # 2. Initialize Model
     # Note: epochs=10 is set for pipeline testing. Increase to 50-100 for better accuracy.
@@ -100,41 +95,64 @@ def impute_pypots_model(
     model.fit({"X": X_train})
     train_time = time.perf_counter() - start_train
 
-    # 4. Predict
-    print(f"Predicting with {model_type}...")
-    start_predict = time.perf_counter()
-    imputed_output = model.predict({"X": X_test})
-    predict_time = time.perf_counter() - start_predict
-
-    # Extract the numpy array
-    if isinstance(imputed_output, dict):
-        imputed_data = imputed_output["imputation"]
-    else:
-        imputed_data = imputed_output
-
-    # 5. Flatten, Truncate Padding, and Inverse Scale
-    imputed_flat = imputed_data.reshape(-1, n_features)
-    if test_pad_len > 0:
-        imputed_flat = imputed_flat[:-test_pad_len]
-
-    imputed_final = scaler.inverse_transform(imputed_flat)
-
-    # 6. Save Outputs
-    df_imputed = df_test.copy()
-    df_imputed[TARGET_COLUMNS] = imputed_final
-
+    # 4. Imputation
     os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, f"{model_type.lower()}_output.parquet")
-    df_imputed.to_parquet(output_path)
+    output_files = []
 
-    timing_data = {
-        "train_time_seconds": train_time,
-        "predict_time_seconds": predict_time,
-        "total_algorithmic_time": train_time + predict_time,
-    }
-    timing_path = os.path.join(output_dir, f"{model_type.lower()}_timing.json")
-    with open(timing_path, "w") as f:
-        json.dump(timing_data, f, indent=4)
+    for test_path in continuous_test_paths:
+        print(f"\nProcessing {model_type} test file: {test_path}")
 
-    print(f"{model_type} imputation complete. Saved to: {output_path}")
-    return output_path
+        # Extract tag (e.g., r0.4_s10)
+        match = re.search(r"(r\d+\.\d+_s\d+)", os.path.basename(test_path))
+        param_tag = match.group(1) if match else "static"
+
+        df_test = pd.read_parquet(test_path)
+
+        # Prepare specific testing tensor
+        X_test, test_pad_len = preprocess_and_reshape(
+            df_test, scaler, n_steps, is_train=False
+        )
+
+        # Predict
+        start_predict = time.perf_counter()
+        imputed_output = model.predict({"X": X_test})
+        predict_time = time.perf_counter() - start_predict
+
+        # Extract the numpy array
+        if isinstance(imputed_output, dict):
+            imputed_data = imputed_output["imputation"]
+        else:
+            imputed_data = imputed_output
+
+        # 5. Flatten, Truncate Padding, and Inverse Scale
+        imputed_flat = imputed_data.reshape(-1, n_features)
+        if test_pad_len > 0:
+            imputed_flat = imputed_flat[:-test_pad_len]
+
+        imputed_final = scaler.inverse_transform(imputed_flat)
+
+        # 6. Save Outputs uniquely based on the gap parameters
+        df_imputed = df_test.copy()
+        df_imputed[TARGET_COLUMNS] = imputed_final
+
+        out_parquet = os.path.join(
+            output_dir, f"{model_type.lower()}_{param_tag}_output.parquet"
+        )
+        df_imputed.to_parquet(out_parquet)
+        output_files.append(out_parquet)
+
+        timing_data = {
+            "train_time_seconds": train_time,
+            "predict_time_seconds": predict_time,
+            "total_algorithmic_time": train_time + predict_time,
+        }
+
+        timing_path = os.path.join(
+            output_dir, f"{model_type.lower()}_{param_tag}_timing.json"
+        )
+        with open(timing_path, "w") as f:
+            json.dump(timing_data, f, indent=4)
+
+        print(f"Saved: {out_parquet}")
+
+    return output_files
