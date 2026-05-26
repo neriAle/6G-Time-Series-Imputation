@@ -1,3 +1,5 @@
+import os
+import glob
 from airflow.sdk import Asset, dag, task
 from airflow.sdk import Param
 from pendulum import datetime
@@ -39,6 +41,28 @@ prepared_data_asset = Asset("file://include/intermediate/prepared_data")
     },
 )
 def data_preparation():
+    @task
+    def clean_intermediate_directory(out_dir):
+        """
+        Ensures a clean state by deleting all old .parquet and .json files
+        from the intermediate and imputed directories before a new run starts.
+        """
+        imputed_dir = os.path.join(out_dir, "imputed")
+
+        # Make sure the directories exist before trying to clean them
+        os.makedirs(out_dir, exist_ok=True)
+        os.makedirs(imputed_dir, exist_ok=True)
+
+        # 1. Clean the main intermediate directory
+        for file_path in glob.glob(os.path.join(out_dir, "*.parquet")):
+            os.remove(file_path)
+
+        # 2. Clean the imputed directory
+        for file_path in glob.glob(os.path.join(imputed_dir, "*")):
+            os.remove(file_path)
+
+        print("Clean state achieved: Old intermediate and imputed files purged.")
+        return True  # Just to signal success
 
     @task(multiple_outputs=True)
     def ingest_datasets(csv_dict, out_dir, **kwargs):
@@ -62,8 +86,12 @@ def data_preparation():
             "discrete_test_inputs": discrete_test_list,
         }
 
+    clean_task = clean_intermediate_directory(INTERMEDIATE_DIR)
     continuous_data = ingest_datasets(INPUT_CSVS, INTERMEDIATE_DIR)
     prepare_discrete_versions(continuous_data, INTERMEDIATE_DIR)
+
+    # Ensure that the ingestion only starts when the cleaning tasks is completed (to avoid deleting newly ingested files)
+    clean_task >> continuous_data
 
 
 data_prep_dag = data_preparation()
