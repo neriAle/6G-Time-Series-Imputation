@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import re
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
@@ -47,26 +48,19 @@ def reconstruct_2d_from_windows(
 
 
 def impute_timesnet(
-    discrete_train_path: str, discrete_test_path: str, output_dir: str
-) -> str:
+    discrete_train_path: str, discrete_test_paths: list, output_dir: str
+) -> list:
     print(f"Loading training data: {discrete_train_path}")
     df_train = pd.read_parquet(discrete_train_path)
 
-    print(f"Loading testing data: {discrete_test_path}")
-    df_test = pd.read_parquet(discrete_test_path)
-
-    # 1. Scale the data
+    # 1. Fit the Scaler strictly on the Training Data
     scaler = StandardScaler()
     train_scaled = scaler.fit_transform(df_train[TARGET_COLUMNS])
-    test_scaled = scaler.transform(df_test[TARGET_COLUMNS])
 
-    # 2. Convert to 3D for Convolution processing
+    # 2. Convert Training data to 3D for Convolution processing
     SEQ_LEN = 30
     X_train = create_sliding_windows(train_scaled, SEQ_LEN)
-    X_test = create_sliding_windows(test_scaled, SEQ_LEN)
-
     dataset_for_training = {"X": X_train}
-    dataset_for_testing = {"X": X_test}
 
     # 3. Initialize TimesNet Architecture
     timesnet = TimesNet(
@@ -88,37 +82,54 @@ def impute_timesnet(
     timesnet.fit(dataset_for_training)
     total_fit_time = time.perf_counter() - start_fit
 
-    # 5. Imputation
-    print("Executing TimesNet Imputation...")
-    start_predict = time.perf_counter()
-    imputation_outputs = timesnet.impute(dataset_for_testing)
-    total_predict_time = time.perf_counter() - start_predict
-
-    # 6. Reconstruct and unscale
-    imputed_2d_scaled = reconstruct_2d_from_windows(
-        imputation_outputs, len(df_test), SEQ_LEN
-    )
-    imputed_2d_final = scaler.inverse_transform(imputed_2d_scaled)
-
-    df_imputed = df_test.copy()
-    df_imputed[TARGET_COLUMNS] = imputed_2d_final
-
-    # 7. Save outputs and timing
     os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, "timesnet_output.parquet")
-    df_imputed.to_parquet(output_path)
+    output_files = []
 
-    timing_data = {
-        "fit_time_seconds": total_fit_time,
-        "predict_time_seconds": total_predict_time,
-        "total_algorithmic_time": total_fit_time + total_predict_time,
-    }
+    # 5. Imputation
+    for test_path in discrete_test_paths:
+        print(f"\nProcessing TimesNet test file: {test_path}")
 
-    timing_path = os.path.join(output_dir, "timesnet_timing.json")
-    with open(timing_path, "w") as f:
-        json.dump(timing_data, f, indent=4)
+        # Extract tag (e.g., r0.4_s10)
+        match = re.search(r"(r\d+\.\d+_s\d+)", os.path.basename(test_path))
+        param_tag = match.group(1) if match else "static"
 
-    print(f"TimesNet output saved to: {output_path}")
-    print(f"Algorithmic Predict Time: {total_predict_time:.6f}s")
+        df_test = pd.read_parquet(test_path)
 
-    return output_path
+        # Scale and reshape test data using the pre-fitted scaler
+        test_scaled = scaler.transform(df_test[TARGET_COLUMNS])
+        X_test = create_sliding_windows(test_scaled, SEQ_LEN)
+        dataset_for_testing = {"X": X_test}
+
+        # Predict
+        start_predict = time.perf_counter()
+        imputation_outputs = timesnet.impute(dataset_for_testing)
+        total_predict_time = time.perf_counter() - start_predict
+
+        # 6. Reconstruct and unscale
+        imputed_2d_scaled = reconstruct_2d_from_windows(
+            imputation_outputs, len(df_test), SEQ_LEN
+        )
+        imputed_2d_final = scaler.inverse_transform(imputed_2d_scaled)
+
+        df_imputed = df_test.copy()
+        df_imputed[TARGET_COLUMNS] = imputed_2d_final
+
+        # 7. Save unique outputs and timing
+        output_path = os.path.join(output_dir, f"timesnet_{param_tag}_output.parquet")
+        df_imputed.to_parquet(output_path)
+        output_files.append(output_path)
+
+        timing_data = {
+            "fit_time_seconds": total_fit_time,
+            "predict_time_seconds": total_predict_time,
+            "total_algorithmic_time": total_fit_time + total_predict_time,
+        }
+
+        timing_path = os.path.join(output_dir, f"timesnet_{param_tag}_timing.json")
+        with open(timing_path, "w") as f:
+            json.dump(timing_data, f, indent=4)
+
+        print(f"TimesNet output saved to: {output_path}")
+        print(f"Algorithmic Predict Time: {total_predict_time:.6f}s")
+
+    return output_files

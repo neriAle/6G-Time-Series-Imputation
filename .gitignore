@@ -219,3 +219,5 @@ __marimo__/
 
 # Generated datasets
 include/data/intermediate/*
+include/data/results/*
+include/data/plots/*
