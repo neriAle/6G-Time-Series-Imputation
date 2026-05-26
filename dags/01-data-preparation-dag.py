@@ -25,19 +25,16 @@ prepared_data_asset = Asset("file://include/intermediate/prepared_data")
             enum=["static", "dynamic"],
             description="Use static test_input.csv or dynamically generate gaps?",
         ),
-        "missing_ratio": Param(
-            default=0.20,
-            type="number",
-            minimum=0.01,
-            maximum=0.99,
-            description="Fraction of data to mask (if mode=dynamic).",
-        ),
-        "block_size": Param(
-            default=5,
-            type="integer",
-            minimum=1,
-            maximum=100,
-            description="Number of consecutive rows per gap (if mode=dynamic).",
+        "gap_scenarios": Param(
+            default=[[0.2, 5], [0.4, 10]],
+            type="array",
+            description="List of [missing_ratio, block_size] scenarios to test (if mode=dynamic).",
+            items={
+                "type": "array",
+                "items": {"type": "number"},
+                "minItems": 2,
+                "maxItems": 2,
+            },
         ),
     },
 )
@@ -48,16 +45,22 @@ def data_preparation():
         ui_params = kwargs["params"]
 
         mode = ui_params["mode"]
-        missing_ratio = ui_params["missing_ratio"]
-        block_size = ui_params["block_size"]
-        return ingest_raw_csvs(csv_dict, out_dir, mode, missing_ratio, block_size)
+        gap_scenarios = ui_params["gap_scenarios"]
+        print(gap_scenarios)
+        return ingest_raw_csvs(csv_dict, out_dir, mode, gap_scenarios)
 
     @task(outlets=[prepared_data_asset])
     def prepare_discrete_versions(continuous_paths, out_dir):
         discrete_train = apply_discrete_adapter(continuous_paths["train"], out_dir)
-        discrete_test = apply_discrete_adapter(continuous_paths["test_input"], out_dir)
+        discrete_test_list = []
+        for test_path in continuous_paths["test_inputs"]:
+            discrete_test_path = apply_discrete_adapter(test_path, out_dir)
+            discrete_test_list.append(discrete_test_path)
 
-        return {"discrete_train": discrete_train, "discrete_test_input": discrete_test}
+        return {
+            "discrete_train": discrete_train,
+            "discrete_test_inputs": discrete_test_list,
+        }
 
     continuous_data = ingest_datasets(INPUT_CSVS, INTERMEDIATE_DIR)
     prepare_discrete_versions(continuous_data, INTERMEDIATE_DIR)
