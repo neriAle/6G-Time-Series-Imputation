@@ -1,0 +1,18 @@
+{
+    "TIMESNET": {
+        "n_layers": 3,
+        "d_model": 128,
+        "d_ffn": 128,
+        "learning_rate": 0.002
+    },
+    "BRITS": {
+        "rnn_hidden_size": 512,
+        "learning_rate": 0.004049958139040813
+    },
+    "CSDI": {
+        "n_layers": 4,
+        "n_heads": 4,
+        "n_channels": 64,
+        "learning_rate": 0.009213106294997192
+    }
+}
