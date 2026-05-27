@@ -6,7 +6,11 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from pypots.imputation import BRITS, CSDI
-from scripts.optuna.helper import TARGET_COLUMNS
+from pypots.optim import Adam
+from include.logic.helper import TARGET_COLUMNS
+
+CONFIG_PATH = "include/model_configs.json"
+SAVED_MODELS_DIR = "include/saved_models"
 
 
 def preprocess_and_reshape(
@@ -50,35 +54,74 @@ def impute_pypots_model(
     # 1. Prepare Tensors
     X_train, _ = preprocess_and_reshape(df_train, scaler, n_steps, is_train=True)
 
-    # 2. Initialize Model
-    # Note: epochs=10 is set for pipeline testing. Increase to 50-100 for better accuracy.
+    # 2. Load Configurations (if they exist)
+    configs = {}
+    if os.path.exists(CONFIG_PATH):
+        print(f"Loading hyperparameters from {CONFIG_PATH}")
+        with open(CONFIG_PATH, "r") as f:
+            configs = json.load(f)
+
+    model_cfg = configs.get(model_type.upper(), {})
+
+    # 3. Initialize Model with Configs
     if model_type == "BRITS":
         model = BRITS(
-            n_steps=n_steps, n_features=n_features, rnn_hidden_size=256, epochs=100
+            n_steps=n_steps,
+            n_features=n_features,
+            rnn_hidden_size=model_cfg.get("rnn_hidden_size", 256),
+            optimizer=Adam(lr=model_cfg.get("learning_rate", 0.001)),
+            epochs=100,
         )
     elif model_type == "CSDI":
         model = CSDI(
             n_steps=n_steps,
             n_features=n_features,
-            n_layers=4,
-            n_heads=4,
-            n_channels=16,
+            n_layers=model_cfg.get("n_layers", 4),
+            n_heads=model_cfg.get("n_heads", 4),
+            n_channels=model_cfg.get("n_channels", 16),
             d_time_embedding=64,
             d_feature_embedding=64,
             d_diffusion_embedding=64,
+            optimizer=Adam(lr=model_cfg.get("learning_rate", 0.001)),
             batch_size=8,
             epochs=100,
         )
     else:
         raise ValueError(f"Unknown model type: {model_type}")
 
-    # 3. Train
-    print(f"Training {model_type}...")
-    start_train = time.perf_counter()
-    model.fit({"X": X_train})
-    train_time = time.perf_counter() - start_train
+    # 4. Check for Cached pre-trained Model
+    os.makedirs(SAVED_MODELS_DIR, exist_ok=True)
+    model_save_path = os.path.join(
+        SAVED_MODELS_DIR, f"{model_type.lower()}_trained.pypots"
+    )
+    timing_save_path = os.path.join(
+        SAVED_MODELS_DIR, f"{model_type.lower()}_train_timing.json"
+    )
 
-    # 4. Imputation
+    if os.path.exists(model_save_path) and os.path.exists(timing_save_path):
+        print(f"Found pre-trained {model_type} model! Loading from cache...")
+
+        # Load the physical model state into memory
+        model.load(model_save_path)
+
+        # Load the historical training time
+        with open(timing_save_path, "r") as f:
+            train_time = json.load(f)["train_time_seconds"]
+
+    else:
+        # If no pre-trained model is found in cache, train it and save it
+        print(f"No cached model found. Training {model_type} from scratch...")
+        start_train = time.perf_counter()
+        model.fit({"X": X_train})
+        train_time = time.perf_counter() - start_train
+
+        # Save the model state and the training time for future runs
+        model.save(model_save_path)
+        with open(timing_save_path, "w") as f:
+            json.dump({"train_time_seconds": train_time}, f, indent=4)
+        print(f"Saved trained {model_type} model to {model_save_path}")
+
+    # 5. Imputation
     os.makedirs(output_dir, exist_ok=True)
     output_files = []
 
@@ -107,14 +150,14 @@ def impute_pypots_model(
         else:
             imputed_data = imputed_output
 
-        # 5. Flatten, Truncate Padding, and Inverse Scale
+        # 6. Flatten, Truncate Padding, and Inverse Scale
         imputed_flat = imputed_data.reshape(-1, n_features)
         if test_pad_len > 0:
             imputed_flat = imputed_flat[:-test_pad_len]
 
         imputed_final = scaler.inverse_transform(imputed_flat)
 
-        # 6. Save Outputs uniquely based on the gap parameters
+        # 7. Save Outputs uniquely based on the gap parameters
         df_imputed = df_test.copy()
         df_imputed[TARGET_COLUMNS] = imputed_final
 

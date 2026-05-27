@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from pypots.imputation import TimesNet
-from scripts.optuna.helper import TARGET_COLUMNS
+from include.logic.helper import TARGET_COLUMNS
 
 
 def create_sliding_windows(data: np.ndarray, seq_len: int) -> np.ndarray:

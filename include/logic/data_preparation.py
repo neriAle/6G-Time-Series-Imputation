@@ -1,7 +1,7 @@
 import pandas as pd
 import os
 import numpy as np
-from scripts.optuna.helper import TARGET_COLUMNS
+from include.logic.helper import TARGET_COLUMNS
 
 
 def ingest_raw_csvs(

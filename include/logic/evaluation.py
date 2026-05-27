@@ -3,7 +3,7 @@ import json
 import re
 import pandas as pd
 import numpy as np
-from scripts.optuna.helper import TARGET_COLUMNS
+from include.logic.helper import TARGET_COLUMNS
 
 
 def evaluate_model(
