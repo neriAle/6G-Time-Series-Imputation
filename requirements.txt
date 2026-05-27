@@ -1,8 +1,8 @@
 # Astro Runtime includes the following pre-installed providers packages: https://www.astronomer.io/docs/astro/runtime-image-architecture#provider-packages
-pandas
-pyarrow>=10.0.0
-darts
-numpy
-scikit-learn
-torch
-pypots
+pandas==2.3.3
+numpy==2.2.6
+scikit-learn==1.7.2
+pyarrow==24.0.0
+pypots==1.5
+torch==2.12.0
+darts==0.44.1
