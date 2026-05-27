@@ -78,3 +78,24 @@ def preprocess_and_reshape(
     data_reshaped = data_scaled.reshape((n_samples, n_steps, len(TARGET_COLUMNS)))
 
     return data_reshaped, pad_len
+
+
+def create_sliding_windows(data: np.ndarray, seq_len: int) -> np.ndarray:
+    """Transforms 2D tabular data into 3D tensors (samples, sequence_length, features)."""
+    samples = []
+    for i in range(len(data) - seq_len + 1):
+        samples.append(data[i : i + seq_len])
+    return np.array(samples)
+
+
+def reconstruct_2d_from_windows(
+    windows: np.ndarray, original_length: int, seq_len: int
+) -> np.ndarray:
+    """Reconstructs the continuous 2D array from PyPOTS 3D overlapping window outputs."""
+    res_2d = np.zeros((original_length, windows.shape[2]))
+    # Take the entire first window
+    res_2d[:seq_len] = windows[0]
+    # For all subsequent windows, append the final step to reconstruct the timeline
+    for i in range(1, len(windows)):
+        res_2d[seq_len + i - 1] = windows[i, -1, :]
+    return res_2d
