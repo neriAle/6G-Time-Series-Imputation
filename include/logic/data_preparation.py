@@ -1,24 +1,7 @@
 import pandas as pd
 import os
 import numpy as np
-
-TARGET_COLUMNS = [
-    "cpu_limit",
-    "cpu_usage",
-    "n",
-    "c",
-    "ram_limit_mb",
-    "ram_usage_mb",
-    "lat50_ms",
-    "lat66_ms",
-    "lat75_ms",
-    "lat80_ms",
-    "lat90_ms",
-    "lat95_ms",
-    "lat98_ms",
-    "lat99_ms",
-    "lat100_ms",
-]
+from scripts.optuna.helper import TARGET_COLUMNS
 
 
 def ingest_raw_csvs(

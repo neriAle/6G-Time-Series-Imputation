@@ -5,25 +5,7 @@ import re
 import pandas as pd
 from darts import TimeSeries
 from darts.models import KalmanFilter
-
-# Columns that have to be imputed
-TARGET_COLUMNS = [
-    "cpu_limit",
-    "cpu_usage",
-    "n",
-    "c",
-    "ram_limit_mb",
-    "ram_usage_mb",
-    "lat50_ms",
-    "lat66_ms",
-    "lat75_ms",
-    "lat80_ms",
-    "lat90_ms",
-    "lat95_ms",
-    "lat98_ms",
-    "lat99_ms",
-    "lat100_ms",
-]
+from scripts.optuna.helper import TARGET_COLUMNS
 
 
 def impute_kalman_filter(
