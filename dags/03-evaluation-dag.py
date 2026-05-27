@@ -3,6 +3,7 @@ from pendulum import datetime
 import os
 import glob
 from include.logic.evaluation import evaluate_model
+from include.logic.aggregation import aggregate_results_for_streamlit
 
 IMPUTED_DIR = "include/data/intermediate/imputed"
 GT_PATH = "include/data/1/test_gt.csv"
@@ -71,12 +72,29 @@ def model_evaluation():
             )
         return evaluate_model(pred_paths, GT_PATH, "CSDI", RESULTS_DIR)
 
+    @task
+    def build_streamlit_dataset():
+        RESULTS_DIR = "include/data/results"
+        IMPUTED_DIR = "include/data/intermediate/imputed"
+        OUTPUT_CSV = "include/data/results/streamlit_dataset.csv"
+
+        return aggregate_results_for_streamlit(RESULTS_DIR, IMPUTED_DIR, OUTPUT_CSV)
+
     # Execution
-    evaluate_kalman()
-    evaluate_nearest()
-    evaluate_timesnet()
-    evaluate_brits()
-    evaluate_csdi()
+    kalman = evaluate_kalman()
+    nearest = evaluate_nearest()
+    timesnet = evaluate_timesnet()
+    brits = evaluate_brits()
+    csdi = evaluate_csdi()
+    streamlit = build_streamlit_dataset()
+
+    [
+        kalman,
+        nearest,
+        timesnet,
+        brits,
+        csdi,
+    ] >> streamlit
 
 
 eval_dag = model_evaluation()
