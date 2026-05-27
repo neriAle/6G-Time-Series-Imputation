@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import seaborn as sns
 
-# Thesis-grade styling
 sns.set_theme(style="whitegrid", context="paper", font_scale=1.2)
 MODELS = ["brits", "csdi", "timesnet", "kalman", "nearest"]
 COLORS = {
@@ -30,6 +29,22 @@ def get_scenario_tags(target_dir: str) -> set:
     return tags if tags else {"static"}
 
 
+def extract_title_from_tag(tag: str) -> str:
+    """Converts 'r0.25_s10' into 'Missing Ratio: 0.25 - Gap Size: 10'."""
+    if tag == "static":
+        return "Static Baseline"
+
+    # Extract the ratio (decimals) and size (integers)
+    match = re.search(r"r(\d+\.\d+)_s(\d+)", tag)
+    if match:
+        ratio = match.group(1)
+        size = match.group(2)
+        return f"Missing Ratio: {ratio} - Gap Size: {size}"
+
+    # Fallback
+    return tag
+
+
 def plot_time_series(imputed_dir: str, gt_path: str, output_dir: str):
     print("Generating Time-Series Plots...")
     os.makedirs(output_dir, exist_ok=True)
@@ -38,43 +53,35 @@ def plot_time_series(imputed_dir: str, gt_path: str, output_dir: str):
     # 1. Convert Unix timestamps to human-readable datetimes BEFORE merging
     df_gt["time"] = pd.to_datetime(df_gt["time"], unit="s")
 
+    # 2. Mathematically isolate the 6 to 10 hour window
+    start_time = df_gt["time"].min()
+    block_start_dt = start_time + pd.Timedelta(hours=6)
+    block_end_dt = start_time + pd.Timedelta(hours=10)
+
     scenarios = get_scenario_tags(imputed_dir)
 
     for tag in scenarios:
-        # sharex=True cleanly ties the 3 subplots together so the time axis is only on the bottom
-        fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
-        fig.suptitle(f"Imputation Reconstruction (Scenario: {tag})", fontweight="bold")
-
         reference_file = glob.glob(os.path.join(imputed_dir, f"*_{tag}_output.parquet"))
         if not reference_file:
             continue
 
         df_ref = pd.read_parquet(reference_file[0])
-        # Convert the reference time as well to match
         df_ref["time"] = pd.to_datetime(df_ref["time"], unit="s")
 
+        # Merge to get the full timeline with the is_gap markers
         df_merged = pd.merge(
             df_gt[["time"] + SUBSET_COLUMNS], df_ref[["time", "is_gap"]], on="time"
         )
-        gap_indices = df_merged.index[df_merged["is_gap"] == 1].tolist()
 
-        if not gap_indices:
-            continue
+        # 3. Slice the merged dataframe to exactly the 4-hour representative window
+        zoom_window = df_merged[
+            (df_merged["time"] >= block_start_dt) & (df_merged["time"] <= block_end_dt)
+        ].reset_index(drop=True)
 
-        # 2. Smart Dynamic Windowing: Find the exact bounds of the FIRST gap chunk
-        first_gap_start = gap_indices[0]
-        first_gap_end = first_gap_start
-        for idx in gap_indices[1:]:
-            if idx == first_gap_end + 1:
-                first_gap_end = idx
-            else:
-                break  # We hit the end of the first contiguous missing block
+        fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
 
-        # Add exactly 60 steps (1 minute) of visible context before and after the gap
-        start_idx = max(0, first_gap_start - 60)
-        end_idx = min(len(df_merged), first_gap_end + 60)
-
-        zoom_window = df_merged.iloc[start_idx:end_idx].reset_index(drop=True)
+        title = extract_title_from_tag(tag)
+        fig.suptitle(f"Imputation Reconstruction ({title})", fontweight="bold")
 
         for i, col in enumerate(SUBSET_COLUMNS):
             ax = axes[i]
@@ -84,7 +91,7 @@ def plot_time_series(imputed_dir: str, gt_path: str, output_dir: str):
                 zoom_window["time"],
                 zoom_window[col],
                 color="black",
-                linewidth=2,
+                linewidth=1.5,
                 label="Ground Truth",
                 zorder=1,
             )
@@ -112,31 +119,31 @@ def plot_time_series(imputed_dir: str, gt_path: str, output_dir: str):
                         imputed_values,
                         color=COLORS[model],
                         label=model.upper(),
-                        s=40,
-                        alpha=0.9,
+                        s=20,
+                        alpha=0.8,
                         edgecolors="white",
-                        linewidth=0.5,
                         zorder=5,
                     )
 
             ax.set_ylabel(col)
 
-            # Format X-axis as (Hours:Minutes:Seconds)
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
+            # Format X-axis as (Hours:Minutes)
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
 
             if i == 0:
                 ax.legend(loc="upper right", bbox_to_anchor=(1.15, 1))
 
-        # Rotate x-axis labels slightly so they don't overlap
         plt.setp(axes[-1].xaxis.get_majorticklabels(), rotation=45, ha="right")
         plt.tight_layout()
+
+        plot_filename = f"timeseries_{tag}.png"
         plt.savefig(
-            os.path.join(output_dir, f"timeseries_{tag}.png"),
+            os.path.join(output_dir, plot_filename),
             dpi=300,
             bbox_inches="tight",
         )
         plt.close()
-        print(f"Saved Time-Series plot for {tag}")
+        print(f"Saved Time-Series plot: {plot_filename}")
 
 
 def plot_accuracy_bars(results_dir: str, output_dir: str):
