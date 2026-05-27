@@ -2,12 +2,12 @@ import os
 import json
 import glob
 import re
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import seaborn as sns
 
-# Thesis-grade styling
 sns.set_theme(style="whitegrid", context="paper", font_scale=1.2)
 MODELS = ["brits", "csdi", "timesnet", "kalman", "nearest"]
 COLORS = {
@@ -30,6 +30,22 @@ def get_scenario_tags(target_dir: str) -> set:
     return tags if tags else {"static"}
 
 
+def extract_title_from_tag(tag: str) -> str:
+    """Converts 'r0.25_s10' into 'Missing Ratio: 0.25 - Gap Size: 10'."""
+    if tag == "static":
+        return "Static Baseline"
+
+    # Extract the ratio (decimals) and size (integers)
+    match = re.search(r"r(\d+\.\d+)_s(\d+)", tag)
+    if match:
+        ratio = match.group(1)
+        size = match.group(2)
+        return f"Missing Ratio: {ratio} - Gap Size: {size}"
+
+    # Fallback
+    return tag
+
+
 def plot_time_series(imputed_dir: str, gt_path: str, output_dir: str):
     print("Generating Time-Series Plots...")
     os.makedirs(output_dir, exist_ok=True)
@@ -38,43 +54,35 @@ def plot_time_series(imputed_dir: str, gt_path: str, output_dir: str):
     # 1. Convert Unix timestamps to human-readable datetimes BEFORE merging
     df_gt["time"] = pd.to_datetime(df_gt["time"], unit="s")
 
+    # 2. Mathematically isolate the 6 to 10 hour window
+    start_time = df_gt["time"].min()
+    block_start_dt = start_time + pd.Timedelta(hours=6)
+    block_end_dt = start_time + pd.Timedelta(hours=10)
+
     scenarios = get_scenario_tags(imputed_dir)
 
     for tag in scenarios:
-        # sharex=True cleanly ties the 3 subplots together so the time axis is only on the bottom
-        fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
-        fig.suptitle(f"Imputation Reconstruction (Scenario: {tag})", fontweight="bold")
-
         reference_file = glob.glob(os.path.join(imputed_dir, f"*_{tag}_output.parquet"))
         if not reference_file:
             continue
 
         df_ref = pd.read_parquet(reference_file[0])
-        # Convert the reference time as well to match
         df_ref["time"] = pd.to_datetime(df_ref["time"], unit="s")
 
+        # Merge to get the full timeline with the is_gap markers
         df_merged = pd.merge(
             df_gt[["time"] + SUBSET_COLUMNS], df_ref[["time", "is_gap"]], on="time"
         )
-        gap_indices = df_merged.index[df_merged["is_gap"] == 1].tolist()
 
-        if not gap_indices:
-            continue
+        # 3. Slice the merged dataframe to exactly the 4-hour representative window
+        zoom_window = df_merged[
+            (df_merged["time"] >= block_start_dt) & (df_merged["time"] <= block_end_dt)
+        ].reset_index(drop=True)
 
-        # 2. Smart Dynamic Windowing: Find the exact bounds of the FIRST gap chunk
-        first_gap_start = gap_indices[0]
-        first_gap_end = first_gap_start
-        for idx in gap_indices[1:]:
-            if idx == first_gap_end + 1:
-                first_gap_end = idx
-            else:
-                break  # We hit the end of the first contiguous missing block
+        fig, axes = plt.subplots(3, 1, figsize=(12, 10), sharex=True)
 
-        # Add exactly 60 steps (1 minute) of visible context before and after the gap
-        start_idx = max(0, first_gap_start - 60)
-        end_idx = min(len(df_merged), first_gap_end + 60)
-
-        zoom_window = df_merged.iloc[start_idx:end_idx].reset_index(drop=True)
+        title = extract_title_from_tag(tag)
+        fig.suptitle(f"Imputation Reconstruction ({title})", fontweight="bold")
 
         for i, col in enumerate(SUBSET_COLUMNS):
             ax = axes[i]
@@ -84,7 +92,7 @@ def plot_time_series(imputed_dir: str, gt_path: str, output_dir: str):
                 zoom_window["time"],
                 zoom_window[col],
                 color="black",
-                linewidth=2,
+                linewidth=1.5,
                 label="Ground Truth",
                 zorder=1,
             )
@@ -112,40 +120,60 @@ def plot_time_series(imputed_dir: str, gt_path: str, output_dir: str):
                         imputed_values,
                         color=COLORS[model],
                         label=model.upper(),
-                        s=40,
-                        alpha=0.9,
+                        s=20,
+                        alpha=0.8,
                         edgecolors="white",
-                        linewidth=0.5,
                         zorder=5,
                     )
 
             ax.set_ylabel(col)
 
-            # Format X-axis as (Hours:Minutes:Seconds)
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
+            # Format X-axis as (Hours:Minutes)
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
 
             if i == 0:
                 ax.legend(loc="upper right", bbox_to_anchor=(1.15, 1))
 
-        # Rotate x-axis labels slightly so they don't overlap
         plt.setp(axes[-1].xaxis.get_majorticklabels(), rotation=45, ha="right")
         plt.tight_layout()
+
+        plot_filename = f"timeseries_{tag}.png"
         plt.savefig(
-            os.path.join(output_dir, f"timeseries_{tag}.png"),
+            os.path.join(output_dir, plot_filename),
             dpi=300,
             bbox_inches="tight",
         )
         plt.close()
-        print(f"Saved Time-Series plot for {tag}")
+        print(f"Saved Time-Series plot: {plot_filename}")
 
 
 def plot_accuracy_bars(results_dir: str, output_dir: str):
     print("Generating Accuracy Grouped Bar Charts...")
     os.makedirs(output_dir, exist_ok=True)
+
+    # 1. Fetch scenarios
     scenarios = get_scenario_tags(results_dir)
 
+    # 2. Sorting helper
+    def scenario_sort_key(tag):
+        if tag == "static":
+            return (-1.0, -1)
+
+        # Extract ratio as float and size as integer
+        match = re.search(r"r(\d+(?:\.\d+)?)_s(\d+)", tag)
+        if match:
+            ratio = float(match.group(1))
+            size = int(match.group(2))
+            # Sorts first by ratio, then by size
+            return (ratio, size)
+
+        return (0.0, 0)
+
+    # 3. Use the computed order for the columns
+    sorted_scenarios = sorted(list(scenarios), key=scenario_sort_key)
+
     data = []
-    for tag in scenarios:
+    for tag in sorted_scenarios:
         for model in MODELS:
             metric_file = os.path.join(results_dir, f"{model}_{tag}_metrics.json")
             if os.path.exists(metric_file):
@@ -176,6 +204,7 @@ def plot_accuracy_bars(results_dir: str, output_dir: str):
             y="RMSE",
             hue="Model",
             palette=[COLORS[m.lower()] for m in MODELS],
+            order=sorted_scenarios,
         )
 
         # Log Scale Y-Axis
@@ -195,8 +224,30 @@ def plot_accuracy_bars(results_dir: str, output_dir: str):
         print(f"Saved Accuracy plot for {col}")
 
 
+def get_pareto_frontier(df: pd.DataFrame, x_col: str, y_col: str):
+    """
+    Calculates the true mathematical Pareto frontier (minimizing both X and Y).
+    Returns the points that form the bottom-left boundary of the dataset.
+    """
+    # Sort by X (Latency) ascending
+    sorted_df = df.sort_values(x_col)
+
+    pareto_front = []
+    min_y = float("inf")
+
+    for _, row in sorted_df.iterrows():
+        # A point is on the Pareto front if its Y (Error) is strictly less
+        # than the smallest Y seen so far as we sweep from left (fastest) to right (slowest).
+        if row[y_col] < min_y:
+            pareto_front.append(row)
+            min_y = row[y_col]
+
+    pareto_df = pd.DataFrame(pareto_front)
+    return pareto_df
+
+
 def plot_pareto_frontier(results_dir: str, imputed_dir: str, output_dir: str):
-    print("Generating Pareto Frontier...")
+    print("Generating Robust Pareto Frontier...")
     os.makedirs(output_dir, exist_ok=True)
     scenarios = get_scenario_tags(results_dir)
 
@@ -211,52 +262,67 @@ def plot_pareto_frontier(results_dir: str, imputed_dir: str, output_dir: str):
                     metrics = json.load(mf)
                     timing = json.load(tf)
 
+                    # Extract all 15 individual column MAPEs
+                    column_mapes = [
+                        metrics[col]["MAPE"]
+                        for col in metrics
+                        if col != "GLOBAL_AVERAGE_MAPE"
+                        and isinstance(metrics[col], dict)
+                    ]
+
+                    # Use Median to ignore outlier columns
+                    robust_mape = np.median(column_mapes) if column_mapes else 0
+
                     data.append(
                         {
-                            "Scenario": tag,
                             "Model": model.upper(),
                             "Latency": max(timing["total_algorithmic_time"], 0.001),
-                            "Global_MAPE": metrics["GLOBAL_AVERAGE_MAPE"],
+                            "Robust_Median_MAPE": robust_mape,
                         }
                     )
 
     if not data:
         return
+
     df_plot = pd.DataFrame(data)
 
     plt.figure(figsize=(10, 7))
+
     sns.scatterplot(
         data=df_plot,
         x="Latency",
-        y="Global_MAPE",
+        y="Robust_Median_MAPE",
         hue="Model",
-        style="Scenario",
         palette=[COLORS[m.lower()] for m in MODELS],
-        s=150,
-        alpha=0.9,
+        s=120,
+        alpha=0.7,
+        edgecolor="white",
     )
 
     plt.xscale("log")
     plt.yscale("log")
-    plt.title("Pareto Frontier: Latency vs. Accuracy (Log-Log)", fontweight="bold")
-    plt.xlabel("Algorithmic Latency (Seconds, Log Scale)")
-    plt.ylabel("Global Average MAPE (%, Log Scale)")
 
-    # Draw the optimal Pareto Curve (Bottom-Left is best)
-    # Group by model to find average position to draw a rough line between Nearest and BRITS
-    avg_perf = df_plot.groupby("Model")[["Latency", "Global_MAPE"]].mean().reset_index()
-    optimal_models = avg_perf[avg_perf["Model"].isin(["NEAREST", "BRITS"])]
-    optimal_models = optimal_models.sort_values("Latency")
+    plt.title("Pareto Frontier: Latency vs. Accuracy", fontweight="bold")
+    plt.xlabel("Algorithmic Latency (Seconds)")
+    plt.ylabel("Median MAPE Across Columns (%)")
+
+    # Calculate and plot the Pareto Frontier
+    pareto_df = get_pareto_frontier(df_plot, "Latency", "Robust_Median_MAPE")
+
+    # Plot the frontier line connecting the optimal points
     plt.plot(
-        optimal_models["Latency"],
-        optimal_models["Global_MAPE"],
-        color="black",
+        pareto_df["Latency"],
+        pareto_df["Robust_Median_MAPE"],
+        color="gray",
         linestyle="--",
-        alpha=0.5,
-        label="Pareto Frontier",
+        linewidth=1.5,
+        zorder=0,
+        label="Optimal Pareto Frontier",
     )
 
-    plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+    handles, labels = plt.gca().get_legend_handles_labels()
+    plt.legend(handles, labels, bbox_to_anchor=(1.05, 1), loc="upper left")
+
     plt.tight_layout()
     plt.savefig(
         os.path.join(output_dir, "pareto_frontier.png"), dpi=300, bbox_inches="tight"
