@@ -150,10 +150,30 @@ def plot_time_series(imputed_dir: str, gt_path: str, output_dir: str):
 def plot_accuracy_bars(results_dir: str, output_dir: str):
     print("Generating Accuracy Grouped Bar Charts...")
     os.makedirs(output_dir, exist_ok=True)
+
+    # 1. Fetch scenarios
     scenarios = get_scenario_tags(results_dir)
 
+    # 2. Sorting helper
+    def scenario_sort_key(tag):
+        if tag == "static":
+            return (-1.0, -1)
+
+        # Extract ratio as float and size as integer
+        match = re.search(r"r(\d+(?:\.\d+)?)_s(\d+)", tag)
+        if match:
+            ratio = float(match.group(1))
+            size = int(match.group(2))
+            # Sorts first by ratio, then by size
+            return (ratio, size)
+
+        return (0.0, 0)
+
+    # 3. Use the computed order for the columns
+    sorted_scenarios = sorted(list(scenarios), key=scenario_sort_key)
+
     data = []
-    for tag in scenarios:
+    for tag in sorted_scenarios:
         for model in MODELS:
             metric_file = os.path.join(results_dir, f"{model}_{tag}_metrics.json")
             if os.path.exists(metric_file):
@@ -184,6 +204,7 @@ def plot_accuracy_bars(results_dir: str, output_dir: str):
             y="RMSE",
             hue="Model",
             palette=[COLORS[m.lower()] for m in MODELS],
+            order=sorted_scenarios,
         )
 
         # Log Scale Y-Axis
