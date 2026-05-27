@@ -2,6 +2,7 @@ import os
 import json
 import glob
 import re
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -202,8 +203,30 @@ def plot_accuracy_bars(results_dir: str, output_dir: str):
         print(f"Saved Accuracy plot for {col}")
 
 
+def get_pareto_frontier(df: pd.DataFrame, x_col: str, y_col: str):
+    """
+    Calculates the true mathematical Pareto frontier (minimizing both X and Y).
+    Returns the points that form the bottom-left boundary of the dataset.
+    """
+    # Sort by X (Latency) ascending
+    sorted_df = df.sort_values(x_col)
+
+    pareto_front = []
+    min_y = float("inf")
+
+    for _, row in sorted_df.iterrows():
+        # A point is on the Pareto front if its Y (Error) is strictly less
+        # than the smallest Y seen so far as we sweep from left (fastest) to right (slowest).
+        if row[y_col] < min_y:
+            pareto_front.append(row)
+            min_y = row[y_col]
+
+    pareto_df = pd.DataFrame(pareto_front)
+    return pareto_df
+
+
 def plot_pareto_frontier(results_dir: str, imputed_dir: str, output_dir: str):
-    print("Generating Pareto Frontier...")
+    print("Generating Robust Pareto Frontier...")
     os.makedirs(output_dir, exist_ok=True)
     scenarios = get_scenario_tags(results_dir)
 
@@ -218,52 +241,67 @@ def plot_pareto_frontier(results_dir: str, imputed_dir: str, output_dir: str):
                     metrics = json.load(mf)
                     timing = json.load(tf)
 
+                    # Extract all 15 individual column MAPEs
+                    column_mapes = [
+                        metrics[col]["MAPE"]
+                        for col in metrics
+                        if col != "GLOBAL_AVERAGE_MAPE"
+                        and isinstance(metrics[col], dict)
+                    ]
+
+                    # Use Median to ignore outlier columns
+                    robust_mape = np.median(column_mapes) if column_mapes else 0
+
                     data.append(
                         {
-                            "Scenario": tag,
                             "Model": model.upper(),
                             "Latency": max(timing["total_algorithmic_time"], 0.001),
-                            "Global_MAPE": metrics["GLOBAL_AVERAGE_MAPE"],
+                            "Robust_Median_MAPE": robust_mape,
                         }
                     )
 
     if not data:
         return
+
     df_plot = pd.DataFrame(data)
 
     plt.figure(figsize=(10, 7))
+
     sns.scatterplot(
         data=df_plot,
         x="Latency",
-        y="Global_MAPE",
+        y="Robust_Median_MAPE",
         hue="Model",
-        style="Scenario",
         palette=[COLORS[m.lower()] for m in MODELS],
-        s=150,
-        alpha=0.9,
+        s=120,
+        alpha=0.7,
+        edgecolor="white",
     )
 
     plt.xscale("log")
     plt.yscale("log")
-    plt.title("Pareto Frontier: Latency vs. Accuracy (Log-Log)", fontweight="bold")
-    plt.xlabel("Algorithmic Latency (Seconds, Log Scale)")
-    plt.ylabel("Global Average MAPE (%, Log Scale)")
 
-    # Draw the optimal Pareto Curve (Bottom-Left is best)
-    # Group by model to find average position to draw a rough line between Nearest and BRITS
-    avg_perf = df_plot.groupby("Model")[["Latency", "Global_MAPE"]].mean().reset_index()
-    optimal_models = avg_perf[avg_perf["Model"].isin(["NEAREST", "BRITS"])]
-    optimal_models = optimal_models.sort_values("Latency")
+    plt.title("Pareto Frontier: Latency vs. Accuracy", fontweight="bold")
+    plt.xlabel("Algorithmic Latency (Seconds)")
+    plt.ylabel("Median MAPE Across Columns (%)")
+
+    # Calculate and plot the Pareto Frontier
+    pareto_df = get_pareto_frontier(df_plot, "Latency", "Robust_Median_MAPE")
+
+    # Plot the frontier line connecting the optimal points
     plt.plot(
-        optimal_models["Latency"],
-        optimal_models["Global_MAPE"],
-        color="black",
+        pareto_df["Latency"],
+        pareto_df["Robust_Median_MAPE"],
+        color="gray",
         linestyle="--",
-        alpha=0.5,
-        label="Pareto Frontier",
+        linewidth=1.5,
+        zorder=0,
+        label="Optimal Pareto Frontier",
     )
 
-    plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+    handles, labels = plt.gca().get_legend_handles_labels()
+    plt.legend(handles, labels, bbox_to_anchor=(1.05, 1), loc="upper left")
+
     plt.tight_layout()
     plt.savefig(
         os.path.join(output_dir, "pareto_frontier.png"), dpi=300, bbox_inches="tight"
