@@ -6,7 +6,11 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from pypots.imputation import TimesNet
+from pypots.optim import Adam
 from include.logic.helper import TARGET_COLUMNS
+
+CONFIG_PATH = "include/model_configs.json"
+SAVED_MODELS_DIR = "include/saved_models"
 
 
 def create_sliding_windows(data: np.ndarray, seq_len: int) -> np.ndarray:
@@ -45,34 +49,66 @@ def impute_timesnet(
     X_train = create_sliding_windows(train_scaled, SEQ_LEN)
     dataset_for_training = {"X": X_train}
 
-    # 3. Initialize TimesNet Architecture
+    # 3. Load Configurations (if they exist)
+    configs = {}
+    if os.path.exists(CONFIG_PATH):
+        print(f"Loading hyperparameters from {CONFIG_PATH}")
+        with open(CONFIG_PATH, "r") as f:
+            configs = json.load(f)
+
+    model_cfg = configs.get("TIMESNET", {})
+
+    # 4. Initialize TimesNet Architecture with Configs (or Defaults)
     timesnet = TimesNet(
         n_steps=SEQ_LEN,
         n_features=len(TARGET_COLUMNS),
-        n_layers=2,
-        top_k=3,
-        d_model=64,
-        d_ffn=64,
-        n_kernels=3,
-        dropout=0.1,
+        n_layers=model_cfg.get("n_layers", 2),
+        top_k=model_cfg.get("top_k", 3),
+        d_model=model_cfg.get("d_model", 64),
+        d_ffn=model_cfg.get("d_ffn", 64),
+        n_kernels=model_cfg.get("n_kernels", 3),
+        dropout=model_cfg.get("dropout", 0.1),
+        optimizer=Adam(lr=model_cfg.get("learning_rate", 0.001)),
         epochs=15,
         batch_size=32,
     )
 
-    # 4. Training
-    print("Training TimesNet...")
-    start_fit = time.perf_counter()
-    timesnet.fit(dataset_for_training)
-    total_fit_time = time.perf_counter() - start_fit
+    # 5. Check for Cached Model & Timing
+    os.makedirs(SAVED_MODELS_DIR, exist_ok=True)
+    model_save_path = os.path.join(SAVED_MODELS_DIR, "timesnet_trained.pypots")
+    timing_save_path = os.path.join(SAVED_MODELS_DIR, "timesnet_train_timing.json")
+
+    if os.path.exists(model_save_path) and os.path.exists(timing_save_path):
+        print("Found pre-trained TimesNet model! Loading from cache...")
+
+        # Load the physical model state into memory
+        timesnet.load(model_save_path)
+
+        # Load the historical training time
+        with open(timing_save_path, "r") as f:
+            total_fit_time = json.load(f)["train_time_seconds"]
+
+    else:
+        print(
+            "No cached model found. Training TimesNet from scratch (This may take a while)..."
+        )
+        start_fit = time.perf_counter()
+        timesnet.fit(dataset_for_training)
+        total_fit_time = time.perf_counter() - start_fit
+
+        # Save the model state and the training time for future runs
+        timesnet.save(model_save_path)
+        with open(timing_save_path, "w") as f:
+            json.dump({"train_time_seconds": total_fit_time}, f, indent=4)
+        print(f"Saved trained TimesNet model to {model_save_path}")
 
     os.makedirs(output_dir, exist_ok=True)
     output_files = []
 
-    # 5. Imputation
+    # 6. Imputation
     for test_path in discrete_test_paths:
         print(f"\nProcessing TimesNet test file: {test_path}")
 
-        # Extract tag (e.g., r0.4_s10)
         match = re.search(r"(r\d+\.\d+_s\d+)", os.path.basename(test_path))
         param_tag = match.group(1) if match else "static"
 
@@ -85,10 +121,21 @@ def impute_timesnet(
 
         # Predict
         start_predict = time.perf_counter()
-        imputation_outputs = timesnet.impute(dataset_for_testing)
+
+        # Support both .impute() and .predict() depending on your PyPOTS version
+        if hasattr(timesnet, "predict"):
+            imputed_output = timesnet.predict(dataset_for_testing)
+            imputation_outputs = (
+                imputed_output["imputation"]
+                if isinstance(imputed_output, dict)
+                else imputed_output
+            )
+        else:
+            imputation_outputs = timesnet.impute(dataset_for_testing)
+
         total_predict_time = time.perf_counter() - start_predict
 
-        # 6. Reconstruct and unscale
+        # Reconstruct and unscale
         imputed_2d_scaled = reconstruct_2d_from_windows(
             imputation_outputs, len(df_test), SEQ_LEN
         )
@@ -97,7 +144,7 @@ def impute_timesnet(
         df_imputed = df_test.copy()
         df_imputed[TARGET_COLUMNS] = imputed_2d_final
 
-        # 7. Save unique outputs and timing
+        # Save unique outputs and timing
         output_path = os.path.join(output_dir, f"timesnet_{param_tag}_output.parquet")
         df_imputed.to_parquet(output_path)
         output_files.append(output_path)
@@ -113,6 +160,5 @@ def impute_timesnet(
             json.dump(timing_data, f, indent=4)
 
         print(f"TimesNet output saved to: {output_path}")
-        print(f"Algorithmic Predict Time: {total_predict_time:.6f}s")
 
     return output_files
