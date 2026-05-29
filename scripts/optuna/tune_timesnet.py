@@ -16,11 +16,11 @@ def objective(trial):
     print(f"--- Starting Trial {trial.number} ---")
 
     # 1. Let Optuna "suggest" hyperparameters
-    n_layers = trial.suggest_int("n_layers", 1, 4)
-    top_k = trial.suggest_int("top_k", 1, 5)
-    n_kernels = trial.suggest_int("n_kernels", 1, 5)
-    d_model = trial.suggest_categorical("d_model", [32, 64, 128])
-    d_ffn = trial.suggest_categorical("d_ffn", [64, 128, 256])
+    n_layers = trial.suggest_int("n_layers", 1, 2)
+    top_k = trial.suggest_int("top_k", 1, 3)
+    n_kernels = trial.suggest_int("n_kernels", 1, 3)
+    d_model = trial.suggest_categorical("d_model", [32, 64])
+    d_ffn = trial.suggest_categorical("d_ffn", [64, 128])
     dropout = trial.suggest_float("dropout", 0.05, 0.3)
     lr = trial.suggest_float("learning_rate", 1e-4, 1e-2, log=True)
 
@@ -48,6 +48,7 @@ def objective(trial):
         optimizer=Adam(lr=lr),
         epochs=10,
         batch_size=32,
+        device="cuda",
     )
 
     # 4. Train the Model
@@ -67,7 +68,7 @@ def objective(trial):
     imputed_final = scaler.inverse_transform(imputed_2d)
     df_imputed = df_val.copy()
     df_imputed[TARGET_COLUMNS] = imputed_final
-    robust_mape = calculate_median_mape(imputed_final, df_gt)
+    robust_mape = calculate_median_mape(df_imputed, df_gt, TARGET_COLUMNS)
 
     # 6. Return the score
     return robust_mape

@@ -1,9 +1,12 @@
 {
     "TIMESNET": {
-        "n_layers": 3,
-        "d_model": 128,
-        "d_ffn": 128,
-        "learning_rate": 0.002
+        "n_layers": 2,
+        "top_k": 1,
+        "n_kernels": 3,
+        "d_model": 32,
+        "d_ffn": 64,
+        "dropout": 0.276024032634649,
+        "learning_rate": 0.0015756221503499732
     },
     "BRITS": {
         "rnn_hidden_size": 512,
