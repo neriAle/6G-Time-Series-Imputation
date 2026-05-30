@@ -17,7 +17,7 @@ COLORS = {
     "kalman": "#457B9D",
     "nearest": "#1D3557",
 }
-SUBSET_COLUMNS = ["cpu_limit", "ram_usage_mb", "lat100_ms"]
+SUBSET_COLUMNS = ["n", "ram_usage_mb", "lat100_ms"]
 
 
 def get_scenario_tags(target_dir: str) -> set:
