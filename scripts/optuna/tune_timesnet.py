@@ -56,7 +56,7 @@ def objective(trial):
 
     # 5. Evaluate the Model on a Validation Set
     df_val = pd.read_parquet("include/data/intermediate/test_input_r0.25_s5.parquet")
-    df_gt = pd.read_csv("include/data/1/test_gt.csv")
+    df_gt = pd.read_csv("include/data/datasets/1/test_gt.csv")
 
     val_scaled = scaler.transform(df_val[TARGET_COLUMNS])
     X_val = create_sliding_windows(val_scaled, 30)
