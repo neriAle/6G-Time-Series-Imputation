@@ -14,7 +14,7 @@ st.markdown(
 st.sidebar.header("Waveform Settings")
 
 IMPUTED_DIR = "include/data/intermediate/imputed"
-GT_PATH = "include/data/datasets/1/test_gt.csv"
+GT_PATH = "include/data/intermediate/test_gt.csv"
 
 # Find available scenarios
 try:
