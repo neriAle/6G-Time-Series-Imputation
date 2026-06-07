@@ -7,6 +7,12 @@
   <a href="https://www.python.org/downloads/release/python-3120/">
     <img src="https://img.shields.io/badge/python-3.12+-blue.svg?style=flat-square&logo=python&logoColor=white" alt="Python 3.12+">
   </a>
+  <a href="https://docs.astral.sh/ruff/">
+    <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff">
+  </a>
+  <a href="https://docs.pytest.org/">
+    <img src="https://img.shields.io/badge/pytest-Testing-0A9EDC.svg?style=flat-square&logo=pytest&logoColor=white" alt="Pytest">
+  </a>
   <a href="https://www.docker.com/">
     <img src="https://img.shields.io/badge/Docker-Containerized-2496ED.svg?style=flat-square&logo=docker&logoColor=white" alt="Docker">
   </a>
