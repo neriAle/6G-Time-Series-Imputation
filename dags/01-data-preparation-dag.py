@@ -6,9 +6,9 @@ from pendulum import datetime
 from include.logic.data_preparation import ingest_raw_csvs, apply_discrete_adapter
 
 INPUT_CSVS = {
-    "train": "include/data/1/train.csv",
-    "test_input": "include/data/1/test_input.csv",
-    "test_gt": "include/data/1/test_gt.csv",
+    "train": "include/data/datasets/1/train.csv",
+    "test_input": "include/data/datasets/1/test_input.csv",
+    "test_gt": "include/data/datasets/1/test_gt.csv",
 }
 INTERMEDIATE_DIR = "include/data/intermediate"
 
@@ -22,13 +22,38 @@ prepared_data_asset = Asset("file://include/intermediate/prepared_data")
     catchup=False,
     params={
         "mode": Param(
-            default="static",
+            default="dynamic",
             type="string",
             enum=["static", "dynamic"],
             description="Use static test_input.csv or dynamically generate gaps?",
         ),
         "gap_scenarios": Param(
-            default=[[0.2, 5], [0.4, 10]],
+            default=[
+                [0.1, 1],
+                [0.1, 5],
+                [0.1, 10],
+                [0.1, 20],
+                [0.1, 30],
+                [0.1, 60],
+                [0.25, 1],
+                [0.25, 5],
+                [0.25, 10],
+                [0.25, 20],
+                [0.25, 30],
+                [0.25, 60],
+                [0.4, 1],
+                [0.4, 5],
+                [0.4, 10],
+                [0.4, 20],
+                [0.4, 30],
+                [0.4, 60],
+                [0.5, 1],
+                [0.5, 5],
+                [0.5, 10],
+                [0.5, 20],
+                [0.5, 30],
+                [0.5, 60],
+            ],
             type="array",
             description="List of [missing_ratio, block_size] scenarios to test (if mode=dynamic).",
             items={

@@ -6,7 +6,7 @@ from include.logic.evaluation import evaluate_model
 from include.logic.aggregation import aggregate_results_for_streamlit
 
 IMPUTED_DIR = "include/data/intermediate/imputed"
-GT_PATH = "include/data/1/test_gt.csv"
+GT_PATH = "include/data/datasets/1/test_gt.csv"
 RESULTS_DIR = "include/data/results"
 
 

@@ -16,7 +16,7 @@ def objective_brits(trial):
     # 2. Load and Prepare Data
     df_train = pd.read_parquet("include/data/intermediate/train.parquet")
     df_val = pd.read_parquet("include/data/intermediate/test_input_r0.25_s5.parquet")
-    df_gt = pd.read_csv("include/data/1/test_gt.csv")
+    df_gt = pd.read_csv("include/data/datasets/1/test_gt.csv")
 
     scaler = StandardScaler()
     n_steps = 300
@@ -68,7 +68,7 @@ def objective_csdi(trial):
     # 2. Load and Prepare Data
     df_train = pd.read_parquet("include/data/intermediate/train.parquet")
     df_val = pd.read_parquet("include/data/intermediate/test_input_r0.25_s5.parquet")
-    df_gt = pd.read_csv("include/data/1/test_gt.csv")
+    df_gt = pd.read_csv("include/data/datasets/1/test_gt.csv")
 
     scaler = StandardScaler()
     n_steps = 300
