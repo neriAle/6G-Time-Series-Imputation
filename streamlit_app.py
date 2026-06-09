@@ -1,19 +1,51 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import os
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="6G Imputation Dashboard", page_icon="📶", layout="wide")
 
+RESULTS_DIR = "include/data/results"
+
+# --- DYNAMIC DATASET DISCOVERY ---
+# Find all subdirectories inside the results folder
+try:
+    available_datasets = [
+        d
+        for d in os.listdir(RESULTS_DIR)
+        if os.path.isdir(os.path.join(RESULTS_DIR, d))
+    ]
+    available_datasets.sort()
+except FileNotFoundError:
+    st.error(f"Results directory not found at {RESULTS_DIR}. Please run the pipeline.")
+    st.stop()
+
+if not available_datasets:
+    st.error("No dataset folders found inside the results directory.")
+    st.stop()
+
+st.sidebar.header("Dataset Selection")
+selected_dataset = st.sidebar.selectbox("Choose Dataset", available_datasets)
+st.sidebar.divider()
+
 
 # --- DATA LOADING ---
 @st.cache_data
-def load_data():
-    df = pd.read_csv("include/data/results/streamlit_dataset.csv")
-    return df
+def load_data(dataset_name):
+    path = os.path.join(RESULTS_DIR, dataset_name, "streamlit_dataset.csv")
+    if os.path.exists(path):
+        return pd.read_csv(path)
+    return pd.DataFrame()
 
 
-df = load_data()
+df = load_data(selected_dataset)
+
+if df.empty:
+    st.warning(
+        f"No 'streamlit_dataset.csv' found in the '{selected_dataset}' folder yet. Run the pipeline for this dataset!"
+    )
+    st.stop()
 
 # --- SIDEBAR FILTERS ---
 st.sidebar.header("Filter Settings")
@@ -43,7 +75,7 @@ if selected_size != "All":
     filtered_df = filtered_df[filtered_df["Gap_Size"] == selected_size]
 
 # --- MAIN DASHBOARD ---
-st.title("📶 6G Telemetry Imputation: Model Evaluation")
+st.title(f"📶 6G Telemetry Imputation ({selected_dataset.upper()})")
 st.markdown(
     "Compare the accuracy and latency of deep learning and baseline models under various data loss scenarios."
 )
