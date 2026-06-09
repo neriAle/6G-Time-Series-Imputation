@@ -26,6 +26,7 @@ def get_test_paths(intermediate_dir, is_discrete=False):
     start_date=datetime(2024, 4, 20),
     schedule=[prepared_data_asset],  # Triggers when data-preparation finishes
     catchup=False,
+    max_active_tasks=2,
 )
 def data_imputation():
 
