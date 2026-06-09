@@ -43,14 +43,18 @@ def aggregate_results_for_streamlit(
                 ratio = None
                 size = None
 
-        # 2. Fetch the corresponding Latency/Timing data
+        # 2. Fetch the corresponding Latency/Timing data (Inference Only)
         timing_file = os.path.join(imputed_dir, f"{model.lower()}_{tag}_timing.json")
         latency = None
         if os.path.exists(timing_file):
             with open(timing_file, "r") as tf:
                 timing = json.load(tf)
-                # Keep it strictly to the total algorithmic latency
-                latency = timing.get("total_algorithmic_time", 0.0)
+
+                total_time = timing.get("total_algorithmic_time", 0.0)
+                train_time = timing.get("train_time_seconds", 0.0)
+
+                # Isolate pure inference time (safety bound to 1ms to prevent negatives/zeros)
+                latency = max(0.001, total_time - train_time)
 
         # 3. Fetch the Accuracy Metrics
         with open(mf, "r") as f:
