@@ -85,13 +85,13 @@ The pipeline is modularized into four distinct DAGs with a dynamic staging area.
 6. **Generate Static Visuals:** Alternatively, you can manually trigger the `generate_plots` DAG to output the aggregate tables, line charts, and Pareto frontiers as static files.
 
 ### 5. Shut Down
-To safely spin down the containers and preserve your database state:
+To safely spin down the containers run:
 ```bash
 astro dev stop
 ```
 
 ## Dataset Information
-This repository utilizes 5G/6G Core Edge Telemetry (specifically 5G AMF request configurations and Python Web Server metrics) sourced from a public Zenodo repository designed for microservice benchmarking. The datasets can be placed into the `/include/data/datasets` directory for dynamic pipeline ingestion.
+This repository utilizes 5G/6G Core Edge Telemetry (specifically 5G AMF request configurations and Python Web Server metrics) sourced from a public [Zenodo repository](https://zenodo.org/records/6907619) designed for microservice benchmarking. The datasets can be placed into the `/include/data/datasets` directory for dynamic pipeline ingestion.
 
 ## 📄 License
 This project is licensed under the [Apache-2.0 License](LICENSE).
