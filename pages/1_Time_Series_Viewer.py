@@ -6,15 +6,35 @@ import re
 
 st.set_page_config(page_title="Time Series Viewer", page_icon="📈", layout="wide")
 st.title("📈 Time Series Reconstruction Viewer")
-st.markdown(
-    "Inspect how each model physically reconstructed the waveforms during network outages."
-)
 
-# --- SIDEBAR SETTINGS ---
+# Point strictly to the safe results backup folder
+RESULTS_ROOT = "include/data/results"
+
+# --- DYNAMIC DATASET DISCOVERY ---
+try:
+    available_datasets = [
+        d
+        for d in os.listdir(RESULTS_ROOT)
+        if os.path.isdir(os.path.join(RESULTS_ROOT, d))
+    ]
+    available_datasets.sort()
+except FileNotFoundError:
+    st.error(f"Results directory not found at {RESULTS_ROOT}.")
+    st.stop()
+
+if not available_datasets:
+    st.error("No dataset folders found inside the results directory.")
+    st.stop()
+
+st.sidebar.header("Dataset Selection")
+selected_dataset = st.sidebar.selectbox("Choose Dataset", available_datasets)
+st.sidebar.divider()
+
+# Set dynamic paths based on the selected dataset inside the RESULTS folder
+IMPUTED_DIR = os.path.join(RESULTS_ROOT, selected_dataset, "imputed")
+GT_PATH = os.path.join(RESULTS_ROOT, selected_dataset, "test_gt.csv")
+
 st.sidebar.header("Waveform Settings")
-
-IMPUTED_DIR = "include/data/intermediate/imputed"
-GT_PATH = "include/data/datasets/1/test_gt.csv"
 
 # Find available scenarios
 try:
@@ -28,12 +48,14 @@ try:
     scenarios = sorted(list(scenarios))
 
     if not scenarios:
-        st.error("No valid scenarios found in filenames. Check your output files.")
+        st.warning(
+            f"No valid scenarios found in {IMPUTED_DIR}. Have you moved your imputed data here?"
+        )
         st.stop()
 
 except FileNotFoundError:
-    st.error(
-        f"Could not find the directory: {IMPUTED_DIR}. Have you run the pipeline yet?"
+    st.warning(
+        f"Could not find the imputed directory for '{selected_dataset}'. Expected: {IMPUTED_DIR}"
     )
     st.stop()
 
@@ -61,8 +83,11 @@ selected_col = st.sidebar.selectbox("Select Telemetry Metric", TARGET_COLUMNS)
 
 # --- DATA LOADING (CACHED) ---
 @st.cache_data
-def load_timeseries_data(scenario, col):
-    # Load Ground Truth
+def load_timeseries_data(dataset_name, scenario, col):
+    if not os.path.exists(GT_PATH):
+        st.error(f"Ground Truth file missing: {GT_PATH}")
+        return pd.DataFrame()
+
     df_gt = pd.read_csv(GT_PATH)
     df_gt["time"] = pd.to_datetime(df_gt["time"], unit="s")
     combined_data = []
@@ -90,26 +115,26 @@ def load_timeseries_data(scenario, col):
 
 # --- PLOTTING ---
 with st.spinner("Loading parquet files..."):
-    df_plot = load_timeseries_data(selected_scenario, selected_col)
+    df_plot = load_timeseries_data(selected_dataset, selected_scenario, selected_col)
 
-    # Isolate Ground Truth for the line plot
-    gt_data = df_plot[df_plot["Model"] == "Ground Truth"]
-    model_data = df_plot[df_plot["Model"] != "Ground Truth"]
+    if not df_plot.empty:
+        gt_data = df_plot[df_plot["Model"] == "Ground Truth"]
+        model_data = df_plot[df_plot["Model"] != "Ground Truth"]
 
-    fig = px.line(
-        gt_data,
-        x="time",
-        y=selected_col,
-        color_discrete_sequence=["gray"],
-        title=f"Imputation for {selected_col} ({selected_scenario})",
-    )
+        fig = px.line(
+            gt_data,
+            x="time",
+            y=selected_col,
+            color_discrete_sequence=["gray"],
+            title=f"Imputation for {selected_col} ({selected_scenario}) - {selected_dataset.upper()}",
+        )
 
-    # Add the model predictions as scatter dots on top
-    if not model_data.empty:
-        fig_scatter = px.scatter(model_data, x="time", y=selected_col, color="Model")
-        # Merge the scatter traces into the main figure
-        for trace in fig_scatter.data:
-            fig.add_trace(trace)
+        if not model_data.empty:
+            fig_scatter = px.scatter(
+                model_data, x="time", y=selected_col, color="Model"
+            )
+            for trace in fig_scatter.data:
+                fig.add_trace(trace)
 
-    fig.update_layout(hovermode="x unified")
-    st.plotly_chart(fig, use_container_width=True)
+        fig.update_layout(hovermode="x unified")
+        st.plotly_chart(fig, use_container_width=True)

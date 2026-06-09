@@ -27,7 +27,7 @@
   </a>
 </p>
 
-This repository contains the end-to-end MLOps evaluation framework for benchmarking multivariate time-series imputation architectures under simulated 6G millimeter-wave (mmWave) network blockages.
+This repository contains the end-to-end MLOps evaluation framework for benchmarking multivariate time-series imputation architectures under simulated 6G edge telemetry outages and connection drops. 
 
 This pipeline was developed to evaluate the Pareto-optimal trade-off between reconstruction accuracy (RMSE/MAPE) and algorithmic latency across traditional statistical baselines and modern deep learning paradigms.
 
@@ -68,18 +68,21 @@ Because this project utilizes dynamic port mapping to prevent local collisions, 
 3. Under the **"Ports"** column, click the dynamically generated localhost link (e.g., `http://127.0.0.1:11371/`).
 
 ### 4. Run the Experiments
-The pipeline is modularized into four distinct DAGs. To execute the full evaluation:
+The pipeline is modularized into four distinct DAGs with a dynamic staging area. To execute the full evaluation:
 
-1. **Start the Pipeline:** In the Airflow dashboard, click the **"Trigger"** (Play) button on the `data_preparation` DAG. The default JSON configuration automatically includes the full 24-scenario simulation grid, modify these as you wish then click **"Trigger"** at the bottom of the page.
-2. **Wait for Imputation:** The `data_preparation` DAG will automatically trigger the `data_imputation` DAG upon completion. Wait for `data_imputation` to fully succeed for all models.
-    - The pre-trained models for BRITS, CSDI, and TimesNet have been included in `/include/saved_models`. If you wish to train the models from scratch, delete these files locally before running the `data_imputation` DAG. *(Note: this requires significant compute time)*.
+1. **Start the Pipeline:** In the Airflow dashboard, click the **"Trigger"** (Play) button on the `data_preparation` DAG. Here you can specify the `dataset_folder` (e.g., `amf` or `python`), indicate if the data `is_pre_split`, and adjust the 24-scenario simulation grid. Click **"Trigger"** at the bottom of the page.
+2. **Wait for Imputation:** The `data_preparation` DAG will automatically trigger the `data_imputation` DAG upon completion. The pipeline utilizes a throttled concurrency limit (`max_active_tasks=2`) to protect local RAM while maintaining parallel branching. Wait for `data_imputation` to fully succeed for all models. *(Note: Training deep learning architectures from scratch on new datasets requires significant compute time)*.
 3. **Evaluate Metrics:** Once imputation is complete, manually click the **"Trigger"** button on `model_evaluation` to calculate the RMSE and MAPE scores.
-4. **Interactive Dashboard:** With the evaluation complete, you can interactively explore the results. Open a terminal in the root directory of the project and launch the web dashboard:
+4. **Stage Results for Visualization:** The pipeline outputs results to a volatile staging area. To visualize the data and allow the Streamlit dashboard to dynamically discover your dataset, you must move the outputs into a dedicated folder. Create a new folder named after your dataset (e.g., `include/data/results/amf/`) and move the following items into it:
+   - `include/data/results/streamlit_dataset.csv`
+   - `include/data/intermediate/test_gt.csv`
+   - The entire `include/data/intermediate/imputed/` folder
+5. **Interactive Dashboard:** With the evaluation complete and files safely staged, you can interactively explore the results across any generated datasets. Open a terminal in the root directory of the project and launch the web dashboard:
    ```bash
    pip install streamlit pandas
    streamlit run streamlit_app.py
    ```
-5. **Generate Static Visuals:** Alternatively, you can manually trigger the `generate_plots` DAG to output the aggregate tables, line charts, and Pareto frontiers as static files.
+6. **Generate Static Visuals:** Alternatively, you can manually trigger the `generate_plots` DAG to output the aggregate tables, line charts, and Pareto frontiers as static files.
 
 ### 5. Shut Down
 To safely spin down the containers and preserve your database state:
@@ -88,7 +91,7 @@ astro dev stop
 ```
 
 ## Dataset Information
-This repository utilizes a pre-packaged subset of 6G telemetry sourced from a public Zenodo repository designed for microservice benchmarking. The native dataset is included in the `/include/data/datasets` directory.
+This repository utilizes 5G/6G Core Edge Telemetry (specifically 5G AMF request configurations and Python Web Server metrics) sourced from a public Zenodo repository designed for microservice benchmarking. The datasets can be placed into the `/include/data/datasets` directory for dynamic pipeline ingestion.
 
 ## 📄 License
-This project is licensed under the Apache-2.0 License.
+This project is licensed under the [Apache-2.0 License](LICENSE).

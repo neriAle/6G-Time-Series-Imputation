@@ -7,7 +7,7 @@ from include.logic.plotting import (
 )
 
 IMPUTED_DIR = "include/data/intermediate/imputed"
-GT_PATH = "include/data/datasets/1/test_gt.csv"
+GT_PATH = "include/data/intermediate/test_gt.csv"
 RESULTS_DIR = "include/data/results"
 PLOTS_DIR = "include/data/plots"
 
