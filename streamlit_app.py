@@ -90,8 +90,8 @@ if filtered_df.empty:
         "No data matches this combination of filters. Please adjust the sidebar."
     )
 else:
-    best_mape = filtered_df["MAPE"].min()
-    best_mape_model = filtered_df[filtered_df["MAPE"] == best_mape]["Model"].iloc[0]
+    best_rmse = filtered_df["RMSE"].min()
+    best_rmse_model = filtered_df[filtered_df["RMSE"] == best_rmse]["Model"].iloc[0]
 
     fastest_time = filtered_df["Latency_Seconds"].min()
     fastest_model = filtered_df[filtered_df["Latency_Seconds"] == fastest_time][
@@ -99,7 +99,7 @@ else:
     ].iloc[0]
 
     col1.metric(
-        "Lowest Average Error (MAPE)", f"{best_mape:.2f}%", f"Best: {best_mape_model}"
+        "Lowest Average Error (RMSE)", f"{best_rmse:.2f}", f"Best: {best_rmse_model}"
     )
     col2.metric("Fastest Algorithm", f"{fastest_time:.3f}s", f"Best: {fastest_model}")
     col3.metric("Scenarios Evaluated", len(filtered_df["Scenario_Tag"].unique()))
@@ -120,11 +120,11 @@ else:
         fig_bar = px.bar(
             chart_df,
             x="Gap_Size",
-            y="MAPE",
+            y="RMSE",
             color="Model",
             barmode="group",
-            title=f"MAPE by Gap Size ({selected_col})",
-            labels={"Gap_Size": "Gap Duration (Seconds)", "MAPE": "MAPE (%)"},
+            title=f"RMSE by Gap Size ({selected_col})",
+            labels={"Gap_Size": "Gap Duration (Seconds)", "RMSE": "RMSE"},
         )
 
         # Force the X-axis to treat Gap Size as discrete categories, not a continuous timeline
@@ -138,14 +138,14 @@ else:
         fig_scatter = px.scatter(
             filtered_df,
             x="Latency_Seconds",
-            y="MAPE",
+            y="RMSE",
             color="Model",
             size="Gap_Size" if selected_size == "All" else None,
             hover_data=["Scenario_Tag"],
             title=f"Latency vs. Accuracy ({selected_col})",
             log_x=True,
             log_y=True,
-            labels={"Latency_Seconds": "Algorithmic Latency (s)", "MAPE": "MAPE (%)"},
+            labels={"Latency_Seconds": "Algorithmic Latency (s)", "RMSE": "RMSE"},
         )
         st.plotly_chart(fig_scatter, use_container_width=True)
 
