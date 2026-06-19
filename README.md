@@ -27,15 +27,17 @@
   </a>
 </p>
 
-This repository contains the end-to-end MLOps evaluation framework for benchmarking multivariate time-series imputation architectures under simulated 6G edge telemetry outages and connection drops. 
+The project in this repository is part of my thesis for the [Research Project](https://github.com/TU-Delft-CSE/Research-Project) 2026 Q4 edition at [TU Delft](https://github.com/TU-Delft-CSE).
+
+This repository contains the end-to-end evaluation framework for benchmarking multivariate time-series imputation architectures under simulated 6G edge telemetry outages and connection drops. 
 
 This pipeline was developed to evaluate the Pareto-optimal trade-off between reconstruction accuracy (RMSE/MAPE) and algorithmic latency across traditional statistical baselines and modern deep learning paradigms.
 
 ## Evaluated Architectures
 * **Statistical Baselines:** Nearest Neighbor, Kalman Filter ([`Darts`](https://github.com/unit8co/darts))
-* **Deep Learning (Recurrent):** BRITS ([`PyPOTS`](https://github.com/WenjieDu/PyPOTS))
-* **Deep Learning (Generative):** CSDI ([`PyPOTS`](https://github.com/WenjieDu/PyPOTS))
-* **Deep Learning (Multi-Periodic):** TimesNet ([`PyPOTS`](https://github.com/WenjieDu/PyPOTS))
+* **Recurrent Neural Network:** BRITS ([`PyPOTS`](https://github.com/WenjieDu/PyPOTS))
+* **Generative Diffusion Model:** CSDI ([`PyPOTS`](https://github.com/WenjieDu/PyPOTS))
+* **Convolutional Neural Network:** TimesNet ([`PyPOTS`](https://github.com/WenjieDu/PyPOTS))
 
 *Note on Hyperparameter Tuning:* Model optimization (specifically for TimesNet) was conducted offline using the [Optuna](https://optuna.org/) framework with GPU acceleration (`device="cuda"`). However, to ensure a strictly fair and hardware-agnostic comparison for the final Pareto latency frontier, all model inferences within the Airflow evaluation pipeline are forced to execute on the CPU.
 
@@ -44,7 +46,7 @@ To ensure absolute reproducibility, regardless of OS, the Airflow evaluation fra
 * [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running.
 * [Astronomer CLI](https://docs.astronomer.io/astro/cli/install-cli) (`astro`) installed.
 * **Python 3.12+** (Required locally for the interactive [Streamlit](https://streamlit.io/) dashboard).
-* **Recommended Hardware:** 16GB RAM and a multi-core CPU. *(Note: Running the full pipeline on 8GB of RAM is possible, but you may need to increase your operating system's Swap/Pagefile memory to prevent Docker Out-Of-Memory container crashes during the heavy deep learning inferences).*
+* **Recommended Hardware:** 16GB RAM and a multi-core CPU. *(Note: Running the full pipeline on 8GB of RAM is possible, but you may need to increase your operating system's Swap/Pagefile memory to prevent Docker Out-Of-Memory container crashes during the heavy deep learning training).*
 
 ## Setup & Execution Instructions
 
