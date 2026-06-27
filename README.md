@@ -29,6 +29,10 @@
 
 The project in this repository is part of my thesis for the [Research Project](https://github.com/TU-Delft-CSE/Research-Project) 2026 Q4 edition at [TU Delft](https://github.com/TU-Delft-CSE).
 
+The paper written to describe the background of this research and to document the methodology and analysis of results can be found [here](https://repository.tudelft.nl/record/uuid:34033619-3374-4880-89a8-4156e6143e8f).
+
+---
+
 This repository contains the end-to-end evaluation framework for benchmarking multivariate time-series imputation architectures under simulated 6G edge telemetry outages and connection drops. 
 
 This pipeline was developed to evaluate the Pareto-optimal trade-off between reconstruction accuracy (RMSE/MAPE) and algorithmic latency across traditional statistical baselines and modern deep learning paradigms.
